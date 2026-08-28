@@ -1,5 +1,10 @@
 # ❄️ Whiteout Survival Autopilot (WOS-Bot)
 
+> **Apple Silicon Mac port.** This fork is pinned to upstream `c7951f19` on branch
+> `mac-port`. The full port record — what the original brief got wrong, the reviews,
+> every decision and what is still blocked — is in [`docs/port/INDEX.md`](docs/port/INDEX.md).
+
+
 <div align="center">
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python)
