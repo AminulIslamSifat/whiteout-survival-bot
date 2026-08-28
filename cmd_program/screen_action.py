@@ -4,10 +4,7 @@ import time
 import subprocess
 import numpy as np
 
-
-# Screen dimensions for percentage calculations
-SCREEN_WIDTH = 1080
-SCREEN_HEIGHT = 2460
+from core.coord_utils import BASE_WIDTH, BASE_HEIGHT
 
 
 def _convert_if_percentage(value, max_value):
@@ -70,8 +67,8 @@ def tap_screen(*args):
         raise ValueError
     
     # Convert percentage to pixels if needed
-    x = _convert_if_percentage(x, SCREEN_WIDTH)
-    y = _convert_if_percentage(y, SCREEN_HEIGHT)
+    x = _convert_if_percentage(x, BASE_WIDTH)
+    y = _convert_if_percentage(y, BASE_HEIGHT)
     
     adb_command = ["shell", "input", "tap", str(x), str(y)]
     run_adb_command(adb_command, device_id)
@@ -87,10 +84,10 @@ def swipe_screen(*args, duration=300):
         raise ValueError
     
     # Convert percentage to pixels if needed
-    x1 = _convert_if_percentage(x1, SCREEN_WIDTH)
-    y1 = _convert_if_percentage(y1, SCREEN_HEIGHT)
-    x2 = _convert_if_percentage(x2, SCREEN_WIDTH)
-    y2 = _convert_if_percentage(y2, SCREEN_HEIGHT)
+    x1 = _convert_if_percentage(x1, BASE_WIDTH)
+    y1 = _convert_if_percentage(y1, BASE_HEIGHT)
+    x2 = _convert_if_percentage(x2, BASE_WIDTH)
+    y2 = _convert_if_percentage(y2, BASE_HEIGHT)
     
     duration = str(duration)
 
@@ -109,8 +106,8 @@ def long_press(*args, duration=300):
         raise ValueError
     
     # Convert percentage to pixels if needed
-    x = _convert_if_percentage(x, SCREEN_WIDTH)
-    y = _convert_if_percentage(y, SCREEN_HEIGHT)
+    x = _convert_if_percentage(x, BASE_WIDTH)
+    y = _convert_if_percentage(y, BASE_HEIGHT)
     
     duration = str(duration)
 

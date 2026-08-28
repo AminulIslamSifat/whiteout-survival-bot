@@ -36,6 +36,7 @@ from concurrent.futures import ThreadPoolExecutor
 from cmd_program.screen_action import take_screenshot
 from cmd_program.screen_stream import screen_capture as stream_screen_capture
 from cmd_program.screen_stream import start_screen_stream, setup_v4l2loopback
+from core.coord_utils import BASE_WIDTH, BASE_HEIGHT
 import paddleocr
 
 
@@ -82,6 +83,10 @@ CPU_THREADS = min(os.cpu_count() or 1, 4)
 TEMPLATE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "references", "icon"))
 RAM_CAP_GB = float(os.getenv("OCR_RAM_CAP_GB", "3.0"))
 RAM_CAP_BYTES = int(RAM_CAP_GB * 1024 * 1024 * 1024)
+# STREAM_WIDTH / STREAM_HEIGHT feed start_screen_stream() (the Linux-only scrcpy path,
+# see below) and are deliberately NOT unified with BASE_WIDTH/BASE_HEIGHT below: on
+# Linux, 2456 may genuinely be scrcpy's real output height, and this codebase cannot
+# verify scrcpy behaviour from a Mac. Do not repurpose these for frame normalization.
 STREAM_WIDTH = 1080
 STREAM_HEIGHT = 2456
 STREAM_TIMEOUT_S = 2.0
@@ -149,15 +154,36 @@ def _save_frame_to_cache(frame):
         print(f"Saved frame to {save_path}")
 
 
+# Coordinate space. The capture leg and the tap leg must agree on ONE base.
+#
+#   MuMu @ 1080x2460
+#     | adb exec-out screencap -p
+#     v
+#   take_screenshot()              screen_action.py   -> 1080x2460
+#     v
+#   _normalize_frame_resolution()  <- YOU ARE HERE
+#     |  dims == base -> early return, no resize
+#     v
+#   ROI percentages                references/TextArea/*.json
+#     v
+#   PaddleOCR -> text + coords
+#     v
+#   tap_screen(x%, y%)             _convert_if_percentage(y, BASE_HEIGHT)
+#     v
+#   adb shell input tap -> MuMu @ 1080x2460
+#
+# Historical bug: this function normalised to STREAM_HEIGHT=2456 while taps used
+# 2460, so the vision leg ran 0.16% short and ocr.py:678 carried a `y1 -= 5` fudge
+# to compensate. Both are gone. BASE_* in core/coord_utils is the single authority.
 def _normalize_frame_resolution(frame):
     if frame is None:
         return None
 
     h, w = frame.shape[:2]
-    if w == STREAM_WIDTH and h == STREAM_HEIGHT:
+    if w == BASE_WIDTH and h == BASE_HEIGHT:
         return frame
 
-    return cv2.resize(frame, (STREAM_WIDTH, STREAM_HEIGHT), interpolation=cv2.INTER_LINEAR)
+    return cv2.resize(frame, (BASE_WIDTH, BASE_HEIGHT), interpolation=cv2.INTER_LINEAR)
 
 
 def _try_start_stream():
@@ -675,9 +701,6 @@ def run_ocr(
                 continue
 
             x1, y1, x2, y2 = roi
-            #a slight adjustment so that it could take scrcpy image to with a res of 1080x2456
-            y1 = y1 - 5
-            y2 = y2
             # Only pad if the crop actually has dimensions
             raw_crop = img[y1:y2, x1:x2]
             if raw_crop.size == 0:
