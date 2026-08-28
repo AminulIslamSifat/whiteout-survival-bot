@@ -142,7 +142,7 @@ Open a **dedicated terminal** and run:
 
 ```bash
 cd ~/wos
-uv run core/ocr.py
+uv run python -m core.ocr
 ```
 
 This launches the FastAPI OCR server at `http://localhost:8000`. Keep this terminal open.
@@ -224,7 +224,7 @@ adb version
 ### 3️⃣ Start OCR Server
 
 ```powershell
-uv run core/ocr.py
+uv run python -m core.ocr
 ```
 
 ### 4️⃣ Configure Accounts & Launch
@@ -442,7 +442,7 @@ kill -9 <PID>
 # Reinstall dependencies and retry
 cd ~/wos
 uv sync
-uv run core/ocr.py
+uv run python -m core.ocr
 ```
 
 ### Bot Clicks in Wrong Locations

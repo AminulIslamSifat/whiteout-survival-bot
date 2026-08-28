@@ -15,7 +15,7 @@ from PIL import Image; import sys
 w,h = Image.open('/tmp/wos-gate.png').size
 sys.exit(0 if (w,h)==(1080,2460) else f'FATAL: framebuffer {w}x{h}, expected 1080x2460')"
 
-uv run core/ocr.py &
+uv run python -m core.ocr &
 OCR_PID=$!
 trap 'kill $OCR_PID 2>/dev/null' EXIT INT TERM
 
@@ -24,5 +24,6 @@ for i in $(seq 1 120); do
   curl -sf localhost:8000/docs >/dev/null && break
   sleep 2
 done
+curl -sf localhost:8000/docs >/dev/null || { echo "FATAL: OCR server never came up"; exit 1; }
 
 uv run python Main/main.py

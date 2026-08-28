@@ -48,6 +48,13 @@ def resolve_device(force=False):
     devices = get_adb_devices()
     if preferred and preferred in devices:
         _device_id = preferred
+    elif preferred:
+        # Silently substituting a different device here would let taps land on
+        # the wrong screen with no error at all -- fail loudly instead.
+        raise RuntimeError(
+            f"WOS_ADB_SERIAL={preferred!r} not found in adb devices; "
+            f"found: {devices!r}"
+        )
     elif devices:
         _device_id = devices[0]
     else:

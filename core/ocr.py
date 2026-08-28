@@ -82,7 +82,7 @@ class ClearCacheRequest(BaseModel):
 SCREENSHOT_TTL = 0.1
 CPU_THREADS = min(os.cpu_count() or 1, 4)
 TEMPLATE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "references", "icon"))
-RAM_CAP_GB = float(os.getenv("OCR_RAM_CAP_GB", "3.0"))
+RAM_CAP_GB = float(os.getenv("OCR_RAM_CAP_GB", "16.0"))
 RAM_CAP_BYTES = int(RAM_CAP_GB * 1024 * 1024 * 1024)
 # STREAM_WIDTH / STREAM_HEIGHT feed start_screen_stream() (the Linux-only scrcpy path,
 # see below) and are deliberately NOT unified with BASE_WIDTH/BASE_HEIGHT below: on
@@ -248,9 +248,11 @@ def _try_start_stream():
 
 
 # The sensor is repaired but the actuator is held dormant during the Mac port:
-# run with OCR_RAM_CAP_GB=16 so _enforce_ram_cap() reports honest RSS without
-# arming _reinitialize_ocr_engine(), a teardown/rebuild path that has never
-# executed on macOS. Lower the cap to 3 once the daily loop is stable.
+# the in-code RAM_CAP_GB default above (16.0) IS the dormancy mechanism -- it
+# keeps _enforce_ram_cap() reporting honest RSS without arming
+# _reinitialize_ocr_engine(), a teardown/rebuild path that has never executed
+# on macOS. OCR_RAM_CAP_GB still overrides it if a caller sets it explicitly.
+# Lower the in-code default to 3 once the daily loop is stable.
 def _get_process_rss_bytes():
     """Current process RSS in bytes. Cross-platform (macOS has no /proc)."""
     try:
@@ -675,12 +677,14 @@ def run_ocr(
     ocr_time_s = 0.0
     post_time_s = 0.0
 
+    img = None
     try:
         capture_start = time.perf_counter()
         img = _capture_frame(img_path, save_frame=save_frame)
         capture_time_s = time.perf_counter() - capture_start
     except Exception as e:
         print(f"Error - {e}")
+        raise RuntimeError(f"OCR capture failed: {e}") from e
 
     if img is None:
         return []

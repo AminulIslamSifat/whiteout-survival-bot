@@ -49,9 +49,19 @@ def test_wos_adb_serial_set_and_present_wins_over_first_device(monkeypatch):
     assert sa.resolve_device() == "serial-b"
 
 
-def test_wos_adb_serial_set_but_absent_falls_back_to_first_device(monkeypatch):
-    # A stale env var must not block a working device.
+def test_wos_adb_serial_set_but_absent_raises_loudly(monkeypatch):
+    # A stale/wrong env var must NOT silently substitute a different device --
+    # that lets taps land on the wrong device with no error at all. Fail loudly
+    # instead, naming both the requested serial and what was actually found.
     monkeypatch.setenv("WOS_ADB_SERIAL", "stale-serial")
+    monkeypatch.setattr(sa, "get_adb_devices", lambda: ["serial-a", "serial-b"])
+    with pytest.raises(RuntimeError, match="stale-serial"):
+        sa.resolve_device()
+
+
+def test_wos_adb_serial_unset_falls_back_to_first_device(monkeypatch):
+    # An unset WOS_ADB_SERIAL still falls back to devices[0] as before.
+    monkeypatch.delenv("WOS_ADB_SERIAL", raising=False)
     monkeypatch.setattr(sa, "get_adb_devices", lambda: ["serial-a", "serial-b"])
     assert sa.resolve_device() == "serial-a"
 
