@@ -20,6 +20,7 @@ import json
 import time
 import gc
 import ctypes
+import psutil
 import paddle           #Important for paddleocr 2.10.0
 import uvicorn
 import threading
@@ -246,18 +247,16 @@ def _try_start_stream():
             return False
 
 
+# The sensor is repaired but the actuator is held dormant during the Mac port:
+# run with OCR_RAM_CAP_GB=16 so _enforce_ram_cap() reports honest RSS without
+# arming _reinitialize_ocr_engine(), a teardown/rebuild path that has never
+# executed on macOS. Lower the cap to 3 once the daily loop is stable.
 def _get_process_rss_bytes():
-    """Read current process RSS in bytes from /proc for low overhead."""
+    """Current process RSS in bytes. Cross-platform (macOS has no /proc)."""
     try:
-        with open("/proc/self/status", "r", encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("VmRSS:"):
-                    parts = line.split()
-                    # VmRSS is reported as kB.
-                    return int(parts[1]) * 1024
+        return psutil.Process().memory_info().rss
     except Exception:
-        pass
-    return 0
+        return 0
 
 
 def _trim_allocator():
