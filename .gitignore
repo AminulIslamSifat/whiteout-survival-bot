@@ -16,3 +16,4 @@ account.json
 db/account.json
 db/players/*.json
 !db/players/example.json
+.superpowers/
