@@ -17,3 +17,8 @@ dependencies = [
     "rich>=15.0.0",
     "psutil>=7.2.2",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
