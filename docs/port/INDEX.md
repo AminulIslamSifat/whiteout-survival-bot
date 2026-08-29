@@ -53,25 +53,32 @@ the gathering task), and the RAM guard was completely inert on macOS.
   silently was reversed — silent substitution would tap a different device with rescaled
   frames and no error.
 
-## State as of 2026-08-28
+## State as of 2026-08-29
 
-Done and verified:
+Done and verified (see the 2026-08-29 ledger section for evidence):
 
 - `uv run pytest tests/ -q` → **30 passed**, no emulator, no adb, no network.
-- `OCR_CAPTURE_TOOL=adb uv run python -m core.ocr` → Uvicorn on `:8000`.
-- `paddleocr 2.10.0` + `paddlepaddle 3.2.0` confirmed working together on arm64 —
-  the plan's single unverified assumption, now retired.
-- `_normalize_frame_resolution` returns the *same object* for a 1080x2460 frame; the
-  spurious resize is genuinely gone.
+- Emulator live: MuMuPlayer Pro instance 0 at 1080x2460 @ 420dpi (Pixel 8 profile),
+  adb pinned to 127.0.0.1:16384, Homebrew adb 37.0.1. `run.sh`'s framebuffer gate passes.
+- **Phase 2.5 done, with a finding:** the shipped ROIs assume a ~120px top safe-area
+  inset. Fixed in the emulator, not in code:
+  `adb shell cmd overlay enable com.android.internal.display.cutout.emulation.tall`
+  (126px @ 420dpi, survives reboot). MuMu's own cutout setting maxes at 72px.
+- **Phase 5 mail: done.** Collected for real (mailbox badge cleared), cooldown entry in
+  `db/completion_log.txt` (the actual store — nothing writes `db/players/*.json
+  last_visit`; that plan claim was stale), and an immediate re-run **skips**. That was
+  the v1 acceptance criterion for mail.
+- Burner account: `lord846646676` (846646676), guest login, in `db/account.json`
+  (gitignored).
 
-Blocked on hardware you must set up by hand:
+Still open:
 
-- **Phase 2.5** — ROI overlay baseline against an unpatched screenshot.
-- **Phase 5** — first runs (mail, gather, then a re-run proving cooldowns skip them).
-  Needs MuMuPlayer Pro, the game installed, an account, and prepared in-game state.
-
-Next step: `brew install --cask android-platform-tools`, then MuMuPlayer Pro with the
-instance display set to exactly 1080x2460.
+- **Phase 5 gather** — first attempt exited on the world map's first-visit onboarding
+  popup (fresh-account state, not code); re-run after manual map prep in progress.
+- **Guest-account hazard:** `run_bot` always ends in `change_account()`, which taps
+  into Sign-in-with-Google before checking the target email. Until a single-account
+  mode exists, run via the marker watchdog in the session scratchpad
+  (kills `Main.main` on `Marked completed|Skipping|Progressing to the next email`).
 
 ## Operational gotcha
 

@@ -226,3 +226,25 @@ account or losing the guest session. Runs are therefore wrapped in a marker watc
 (kill main.py on "Marked completed|Skipping|Progressing to the next email") until a real
 single-account mode exists. One run reached the Change Account dialog before the
 watchdog matured; it was killed with the dialog open and nothing tapped.
+
+### Gather: done (2026-08-29 19:08)
+Three failures, three distinct causes, all fixed and committed:
+1. First-visit world-map onboarding popup (fresh-account state) — cleared by hand once.
+2. World/City toggle drops taps during the zoom animation — tap-then-assume raced;
+   fixed with verified entry (read, tap, settle, re-read). The search template scores
+   0.97 once the map actually shows; both "Seach Icon not found" exits were this.
+3. Hardcoded node level 8: a young account has no level-8 nodes, and the
+   'No suitable resources' toast is gone before the Gather wait finishes (39 full-frame
+   OCR checks never caught it). Reliable signal, from the operator watching live: a
+   successful search JUMPS THE CAMERA; a failed one leaves the coordinate bar
+   ("#4653 X:1019 Y:308", ROI [25,85.2,70,89.0]) unchanged. gather() now compares
+   coords before/after and steps the level down on no-movement.
+Verified live: 8→7→6, then Gather → Equalize → Deploy; world map shows "Marching 1/1"
+with the march line, camera moved to X:912 Y:292, completion_log updated, and
+db/players/846646676.json persisted gather.node_level=6 — the per-player profile
+(example.json schema, previously dead storage) now evolves with the account.
+
+**v1 acceptance (D12) is met**: mail collected + gather deployed + immediate re-run
+skips via cooldown. Alliance tasks and the other 15 modules remain unproven (burner
+limits + out of scope). Fast-follows parked: single-account mode so run_bot cannot
+reach change_account on a guest; ocr_endpoint opaque-500.
