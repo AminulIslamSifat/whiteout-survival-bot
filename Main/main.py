@@ -97,15 +97,21 @@ console = Console()
 
 
 def start_game(game_name="com.gof.global/com.unity3d.player.MyMainPlayerActivity"):
-    wos_adb_command = [
-        "adb", 
-        "shell", 
-        "am", 
-        "start", 
-        "-n", 
+    # Pin the device when WOS_ADB_SERIAL is set (run.sh always sets it) —
+    # bare adb fails with "more than one device" when MuMu also registers
+    # its emulator-5554 alias.
+    serial = os.getenv("WOS_ADB_SERIAL")
+    wos_adb_command = (
+        ["adb"] + (["-s", serial] if serial else []) + [
+        "shell",
+        "am",
+        "start",
+        "-n",
         game_name
-    ]
-    subprocess.run(wos_adb_command)
+    ])
+    # adb inherits and drains stdin; DEVNULL keeps it away from the task
+    # selector's input(), which is the only stdin reader in this program.
+    subprocess.run(wos_adb_command, stdin=subprocess.DEVNULL)
 
 
 

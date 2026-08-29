@@ -4,18 +4,23 @@ PORT="${WOS_ADB_PORT:-16384}"
 export WOS_ADB_SERIAL="127.0.0.1:$PORT"
 export OCR_CAPTURE_TOOL=adb
 export OCR_RAM_CAP_GB="${OCR_RAM_CAP_GB:-16}"
+# Unbuffered stdout: when this script's output is piped (logging, watchdogs),
+# block buffering otherwise delays progress lines by minutes.
+export PYTHONUNBUFFERED=1
 
-adb connect "$WOS_ADB_SERIAL"
+# adb reads stdin; </dev/null keeps it from draining input piped to this
+# script before Main.main's task selector gets to read it.
+adb connect "$WOS_ADB_SERIAL" </dev/null
 
 # Gate on real framebuffer dimensions, not `wm size` — that can print both
 # Physical and Override lines, and proves neither screenshot size nor viewport.
-adb -s "$WOS_ADB_SERIAL" exec-out screencap -p > /tmp/wos-gate.png
+adb -s "$WOS_ADB_SERIAL" exec-out screencap -p > /tmp/wos-gate.png </dev/null
 uv run python -c "
 from PIL import Image; import sys
 w,h = Image.open('/tmp/wos-gate.png').size
 sys.exit(0 if (w,h)==(1080,2460) else f'FATAL: framebuffer {w}x{h}, expected 1080x2460')"
 
-uv run python -m core.ocr &
+uv run python -m core.ocr </dev/null &
 OCR_PID=$!
 trap 'kill $OCR_PID 2>/dev/null' EXIT INT TERM
 
@@ -26,4 +31,6 @@ for i in $(seq 1 120); do
 done
 curl -sf localhost:8000/docs >/dev/null || { echo "FATAL: OCR server never came up"; exit 1; }
 
-uv run python Main/main.py
+# Module form, not path form: running Main/main.py puts Main/ (not the repo
+# root) on sys.path[0], so `import cmd_program` fails. Same fix as core.ocr above.
+uv run python -m Main.main
