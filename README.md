@@ -19,7 +19,7 @@ got wrong, every review, decision, and finding — lives in
 
 - **v1 daily loop verified live**: mail collected, gather deployed with an adaptive
   per-player node level, and an immediate re-run correctly skips on cooldown.
-- **Offline test suite**: `uv run pytest tests/ -q` → 37 passed. No emulator, no adb,
+- **Offline test suite**: `uv run pytest tests/ -q` → 40 passed. No emulator, no adb,
   no network needed.
 - Linux-only paths (scrcpy/v4l2 streaming) are untouched but unused on macOS —
   the launcher forces `OCR_CAPTURE_TOOL=adb`.
@@ -146,6 +146,10 @@ automatically.
 Multiple characters under one email are supported — the bot switches between them
 automatically and verifies after each switch that it is still on the expected email.
 
+With exactly one configured email the bot never opens the account-switch (Google
+sign-in) flow: it runs one pass over that email's characters, prints
+`Single account configured (<email>) - pass complete, exiting.`, and exits 0.
+
 Environment knobs (all optional, defaults set by `run.sh`):
 
 | Variable | Default | Purpose |
@@ -199,10 +203,6 @@ way, and never share the real files.
 
 ## Known hazards & gotchas
 
-- **Guest-account hazard**: `run_bot` always ends in `change_account()`, which taps
-  into Google sign-in before checking the target email. Until a single-account mode
-  exists, don't leave a guest-login account unattended at end-of-run. Details in
-  [`docs/port/INDEX.md`](docs/port/INDEX.md).
 - **uv version**: a `~/.local/bin/uv` at 0.6.16 silently downgrades `uv.lock` from
   revision 3 to 2 on any `uv add`. Use `/opt/homebrew/bin/uv` for lockfile-mutating
   commands; `uv run` is unaffected.
@@ -222,7 +222,7 @@ way, and never share the real files.
 ## Testing
 
 ```bash
-uv run pytest tests/ -q    # 37 passed — fully offline
+uv run pytest tests/ -q    # 40 passed — fully offline
 ```
 
 ---

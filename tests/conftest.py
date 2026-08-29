@@ -17,3 +17,9 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 os.environ.setdefault("OCR_CAPTURE_TOOL", "adb")
+
+# Importing Main.main pulls core.core, whose import-time init_database()
+# (core/core.py:754) opens references/*.json via relative paths — the same
+# repo-root-cwd requirement every real run has. Pin the cwd so collection
+# works no matter where pytest is invoked from.
+os.chdir(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

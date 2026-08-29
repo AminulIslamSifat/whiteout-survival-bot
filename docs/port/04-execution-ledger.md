@@ -248,3 +248,26 @@ db/players/846646676.json persisted gather.node_level=6 — the per-player profi
 skips via cooldown. Alliance tasks and the other 15 modules remain unproven (burner
 limits + out of scope). Fast-follows parked: single-account mode so run_bot cannot
 reach change_account on a guest; ocr_endpoint opaque-500.
+
+## 2026-08-29 — Single-account mode: done
+
+Resolves the guest-account hazard recorded above ("Operational hazard —
+change_account on a guest account") and closes the first fast-follow parked under
+the v1 acceptance note.
+
+- `run_bot` now guards the account-switch tail: when `len(email_list) == 1` it
+  prints `Single account configured (<email>) - pass complete, exiting.` and
+  returns instead of calling `change_account()`. The guard sits after the inner
+  per-character loop, so it covers both the tasks-ran and all-skipped-by-cooldown
+  paths — the exact hazard path. Auto-detected, no env flag: switching to the same
+  email is always pointless and risky, so this is a correctness fix, not a mode,
+  and the safety must not depend on remembering a flag.
+- Clean exit (code 0) retires the external marker watchdog. Note for anyone still
+  running it: "Progressing to the next email" no longer prints on 1-email configs.
+- `start_game()` / `init_database()` moved from module scope into Main/main.py's
+  `__main__` block — runtime order for `python -m Main.main` unchanged, but
+  `import Main.main` is now side-effect-free, which enabled unit tests.
+- 3 tests added (tests/test_run_bot.py): single email runs tasks then exits with
+  change_account never called; single email all-on-cooldown still exits without
+  change_account; two emails still progress with the existing loud-fail on a
+  failed switch. Suite: 37 → 40 passed, fully offline.

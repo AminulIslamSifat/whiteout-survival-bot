@@ -70,15 +70,20 @@ Done and verified (see the 2026-08-29 ledger section for evidence):
   the v1 acceptance criterion for mail.
 - Burner account: `lord846646676` (846646676), guest login, in `db/account.json`
   (gitignored).
+- **Single-account mode: done.** With one configured email, `run_bot` never calls
+  `change_account()` — it runs one pass and exits cleanly with a marker line. The
+  guest-account hazard (change_account taps into Sign-in-with-Google before checking
+  the target email) is resolved for 1-email configs; the marker watchdog is retired.
+  See the 2026-08-29 single-account ledger section.
+
+- **Phase 5 gather: done.** Adaptive node level (8→7→6) with camera-jump search
+  detection; march deployed live and the per-player profile persisted the level.
+  **v1 acceptance (D12) is met** — see the gather ledger section.
 
 Still open:
 
-- **Phase 5 gather** — first attempt exited on the world map's first-visit onboarding
-  popup (fresh-account state, not code); re-run after manual map prep in progress.
-- **Guest-account hazard:** `run_bot` always ends in `change_account()`, which taps
-  into Sign-in-with-Google before checking the target email. Until a single-account
-  mode exists, run via the marker watchdog in the session scratchpad
-  (kills `Main.main` on `Marked completed|Skipping|Progressing to the next email`).
+- **ocr_endpoint opaque-500** — parked fast-follow (predates this branch).
+- Alliance tasks and the other 15 modules remain unproven on the burner.
 
 ## Operational gotcha
 

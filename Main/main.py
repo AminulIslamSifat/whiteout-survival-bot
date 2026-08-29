@@ -326,10 +326,6 @@ def player_initialization():
     
 
 
-start_game()
-init_database()
-
-
 def get_next_email(current_email):
     if not email_list:
         return None
@@ -403,6 +399,10 @@ def run_bot(selected_tasks):
                     f"Unexpected email after character switch. Expected {current_email}, got {current_player.email}"
                 )
 
+        if len(email_list) == 1:
+            print(f"Single account configured ({current_email}) - pass complete, exiting.")
+            return
+
         print(f"Progressing to the next email: {next_email}")
         status = change_account(next_email)
         if not status:
@@ -411,5 +411,9 @@ def run_bot(selected_tasks):
 
 
 if __name__=="__main__":
+    # Side effects live here, not at module scope, so tests can import Main.main.
+    # Runtime order for `python -m Main.main` is unchanged.
+    start_game()
+    init_database()
     selected_tasks = prompt_task_selection()
     run_bot(selected_tasks)
