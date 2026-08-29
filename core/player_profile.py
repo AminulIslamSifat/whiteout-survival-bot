@@ -5,7 +5,6 @@ that dict, seeded from the example on first sight of a player id and updated
 as the account evolves (levels, unlocks, working gather node level). Nothing
 here invents a parallel format.
 """
-import copy
 import json
 import os
 
@@ -21,11 +20,16 @@ def _profile_path(player_id):
 
 def load_profile(player_id):
     """Load db/players/<id>.json, seeding a new profile from example.json
-    when the player has none yet."""
+    when the player has none yet or the file is corrupt (upstream even shipped
+    a zero-byte one). A missing example.json still raises: that is repo
+    damage, and failing loud beats running with an empty profile."""
     path = _profile_path(player_id)
     if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            print(f"⚠️ Corrupt profile {path}, reseeding from example.json")
 
     with open(EXAMPLE_PATH, "r") as f:
         profile = json.load(f)

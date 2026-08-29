@@ -19,22 +19,28 @@ from cmd_program.screen_action import(
 
 
 
+def _on_world_map():
+    title = req_text("World.City")
+    try:
+        return title[0][0].lower() == "city"
+    except Exception:
+        return False
+
+
 def enter_world_map(max_attempts=4):
     """Verified world-map entry. The World/City toggle drops taps that land
     during the zoom animation, so tap-then-assume races and the rest of the
-    task then runs against the city view. Read, tap, settle, re-read."""
+    task then runs against the city view. Read, tap, settle, re-read — and
+    verify once more after the last tap, so the final attempt is never an
+    unchecked tap-and-give-up."""
     for _ in range(max_attempts):
         time.sleep(0.5)
-        title = req_text("World.City")
-        try:
-            if title[0][0].lower() == "city":
-                return True
-        except Exception:
-            pass
+        if _on_world_map():
+            return True
         recalibrate()
         tap_on_text("Home.World", wait=2)
         time.sleep(3)
-    return False
+    return _on_world_map()
 
 
 def wait_till_return(lowest_time=14400):
@@ -103,7 +109,14 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
     search_box = [[0, 78.86, 100, 80.49]]
     gathering_nodes = ["meat", "wood", "coal", "iron", "coal", "iron"]
     if node_level is None:
-        node_level = get_gather_node_level(profile) if profile else 8
+        if profile:
+            # Probe one level above the remembered one: the stored level only
+            # ever steps down during a run, so without this the profile could
+            # never recover upward as the account grows. Costs at most one
+            # failed search per run when the stored level is already right.
+            node_level = min(get_gather_node_level(profile) + 1, 8)
+        else:
+            node_level = 8
     node_level = int(node_level)
 
     if not enter_world_map():
@@ -156,13 +169,18 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
         if status:
             status = tap_on_text("World.Search.Gather", wait=5)
             if not status:
-                # No Gather button. If the camera never jumped, the search
-                # found nothing at this level ('No suitable resources') —
-                # step the level down and retry instead of cycling node
-                # types at a level this account cannot use.
+                # No Gather button. If the camera provably never jumped, the
+                # search found nothing at this level ('No suitable resources')
+                # — step the level down and retry. Lowering needs POSITIVE
+                # evidence (both coordinate reads valid and equal): a None
+                # read is an OCR flake, not proof the camera stayed, and a
+                # flake-driven decrement would persist to the profile and
+                # ratchet every account toward level 1 over long runs.
                 coords_after = _read_map_coords()
-                moved = coords_before and coords_after and coords_after != coords_before
-                if not moved and node_level > 1:
+                stayed = (coords_before is not None
+                          and coords_after is not None
+                          and coords_after == coords_before)
+                if stayed and node_level > 1:
                     node_level -= 1
                     print(f"Search didn't move the camera, lowering node level to {node_level}")
                     if profile:

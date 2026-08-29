@@ -65,3 +65,14 @@ def test_node_level_set_persists_and_clamps(players_dir):
 def test_node_level_garbage_falls_back_to_default(players_dir):
     profile = {"id": "x", "gather": {"node_level": "not-a-number"}}
     assert pp.get_gather_node_level(profile) == 8
+
+
+def test_corrupt_profile_reseeds_instead_of_crashing(players_dir):
+    (players_dir / "846646676.json").write_text("")  # upstream shipped a zero-byte file
+    profile = pp.load_profile("846646676")
+    assert profile["id"] == "846646676"
+    assert profile["gather"]["possible_march"] == 4
+
+    (players_dir / "846646676.json").write_text("{not json")
+    profile = pp.load_profile("846646676")
+    assert profile["id"] == "846646676"
