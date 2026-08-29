@@ -171,3 +171,58 @@ Ruling: NOT deleting this workspace, contrary to the skill's default. The plan i
 complete — Task 3 (ROI baseline) and Phase 5 (first runs) are blocked on hardware the
 human must install by hand. This ledger is the handoff document for resuming them.
 Cost if wrong: a scratch directory persists in a gitignored path.
+
+## 2026-08-29 — Emulator bring-up, Phase 2.5, first live runs (Phase 5)
+
+Environment established (all verified over adb, not from config):
+- MuMuPlayer Pro instance 0: 1080x2460 @ 420dpi, Pixel 8 profile (GC3VE), adb port
+  pinned to 16384 via `customAdbPort` (was auto/26624). Homebrew adb 37.0.1 on PATH.
+- `dynamicFpsEnable` OFF (bot samples stills; a 15fps idle throttle mid-transition
+  frame is an OCR hazard), `maxFpsLimit` 30 (frees cores for Paddle).
+- vm.json stores landscape-native `framebufferWidth:2460, framebufferHeight:1080` +
+  `deviceOrientation:1`. Looks transposed; is not. Trust `screencap`, never the config.
+
+### Phase 2.5 finding — the ROIs assume a ~120px top safe-area inset
+The shipped `references/TextArea/*.json` were captured on a device whose game viewport
+started ~120px down (notch/safe-area). On a cutout-less emulator every top-anchored ROI
+missed low by that amount while bottom-anchored ROIs matched within 5px — a safe-area
+shift, NOT a uniform offset and NOT a scaled viewport (both models tested and falsified
+against ChiefProfile anchors spanning the full height). dx was within ±2px everywhere.
+- Fix: `adb shell cmd overlay enable com.android.internal.display.cutout.emulation.tall`
+  (AOSP cutout emulation, 126px inset at 420dpi). Survives emulator reboot. MuMu's own
+  displayCutout setting yields only 72px on every shape — not enough.
+- Result: Home.Mail tabs went 0/9 → 5/9 exact + clipped-partial reads that the
+  expand-retry ladder (core.py try_match expand_px) recovers. Home bottom bar unaffected.
+- The 2456-tall reference frames in frames/ are artifacts of the historical squash bug.
+
+### Live-run bugs found and fixed (this commit)
+1. run.sh launched `Main/main.py` by path → `sys.path[0]=Main/` →
+   `ModuleNotFoundError: cmd_program`. Same class as the final review's CRITICAL
+   (core/ocr.py as script); the fix wave converted only core.ocr. Now `-m Main.main`.
+2. adb drains stdin. `start_game()`'s `subprocess.run` inherited the pipe and ate the
+   task-selector input → EOFError. `stdin=DEVNULL` there; `</dev/null` on run.sh's adb
+   lines. Diagnosed by elimination: uv/curl proven innocent, adb guilty.
+3. `start_game()` used bare `adb` with no `-s` — fails "more than one device" whenever
+   MuMu registers its emulator-5554 alias next to 127.0.0.1:16384. Now honors
+   WOS_ADB_SERIAL, consistent with the resolver's loud-fail design.
+4. PYTHONUNBUFFERED=1 in run.sh: block-buffered stdout delayed progress lines minutes
+   when piped, which nearly defeated the change_account watchdog (below).
+
+### Phase 5 status (burner account, lord846646676)
+- Mail: collected for real — the mailbox badge (2 unread) cleared; completion_log.txt
+  gained `846646676|<ts>`. Selector driven with `printf 'mail\n' | ./run.sh`.
+- Cooldown re-run: PASSED — "Skipping lord846646676 … completed recently". This is the
+  v1 acceptance criterion. Correction to the plan: the cooldown store is
+  db/completion_log.txt (id|epoch|iso lines); no code writes db/players/*.json
+  `last_visit` — that claim in the plan was stale.
+- Gather: in progress at time of writing; result recorded below.
+
+### Operational hazard — change_account on a guest account
+`run_bot` unconditionally calls `change_account()` after the last player, even when all
+players were skipped by cooldown. On a guest (unlinked) account that flow taps
+Settings → Account → Change Account → **Sign in with Google** before it can discover the
+target email is absent. On this burner that risks binding it to the Play-Store Google
+account or losing the guest session. Runs are therefore wrapped in a marker watchdog
+(kill main.py on "Marked completed|Skipping|Progressing to the next email") until a real
+single-account mode exists. One run reached the Change Account dialog before the
+watchdog matured; it was killed with the dialog open and nothing tapped.

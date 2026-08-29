@@ -16,3 +16,6 @@ account.json
 db/account.json
 db/players/*.json
 !db/players/example.json
+
+# Ralph loop scratch state (session tooling, not project code)
+.claude/
