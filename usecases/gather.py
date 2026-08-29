@@ -75,15 +75,20 @@ def wait_till_return(lowest_time=14400):
 
 
 
-def _no_suitable_resource_shown():
-    """Full-frame OCR check for the game's 'no suitable resource' toast, shown
-    when a search finds no node at the requested level near this account."""
-    results = req_ocr(rois=None, name="gather.no_suitable_resource")
+# World-map coordinate bar ("#4653 X:1019 Y:308"), measured live at 1080x2460.
+MAP_COORDS_ROI = [[25, 85.2, 70, 89.0]]
+
+
+def _read_map_coords():
+    """Read the world-map coordinate bar. A successful search jumps the camera
+    (coords change); 'No suitable resources' leaves it in place — that camera
+    jump is the reliable found/not-found signal, not the transient toast."""
+    results = req_ocr(rois=MAP_COORDS_ROI, name="gather.map_coords")
     for item in results or []:
-        text = item.get("text", "").lower()
-        if "suitable" in text or "no resource" in text:
-            return True
-    return False
+        text = item.get("text", "")
+        if "X:" in text or "Y:" in text:
+            return text.strip()
+    return None
 
 
 def _set_search_level(level):
@@ -126,6 +131,7 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
         print(f"Remaining march queue: {remaining_march} ----- Occupied March: {occupied_march}")
         if occupied_march == 5:
             break
+        coords_before = _read_map_coords()
         status = tap_on_template("World.Search", wait=2, threshold=0.6)
         if not status:
             print("Seach Icon not found, Exiting the task...")
@@ -150,15 +156,17 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
         if status:
             status = tap_on_text("World.Search.Gather", wait=5)
             if not status:
-                # Adapt to the account: when the game says no suitable
-                # resource at this level, step down and retry the same node
-                # instead of cycling node types at a level that cannot work.
-                if node_level > 1 and _no_suitable_resource_shown():
+                # No Gather button. If the camera never jumped, the search
+                # found nothing at this level ('No suitable resources') —
+                # step the level down and retry instead of cycling node
+                # types at a level this account cannot use.
+                coords_after = _read_map_coords()
+                moved = coords_before and coords_after and coords_after != coords_before
+                if not moved and node_level > 1:
                     node_level -= 1
-                    print(f"No suitable resource, lowering node level to {node_level}")
+                    print(f"Search didn't move the camera, lowering node level to {node_level}")
                     if profile:
                         set_gather_node_level(profile, node_level)
-                    _set_search_level(node_level)
                     continue
                 i += 1
                 if i>=5:
