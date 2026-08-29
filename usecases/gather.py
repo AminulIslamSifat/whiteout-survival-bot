@@ -136,6 +136,7 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
         occupied_march = 0
     i = 0
     
+    indeterminate = 0
     while remaining_march>0 and occupied_march < 5:
         title = tap_on_text("World.City", tap=False)
         if not title:
@@ -156,11 +157,19 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
         # time.sleep(0.5)             #rapid tap between node and search cause friction
         
         time.sleep(0.5)
-        level = req_text("World.Search.ItemLevel")
+        # level_confirmed gates profile persistence on deploy: the +1 upward
+        # probe must never be recorded unless the UI verifiably shows it —
+        # otherwise OCR failures ratchet the stored level upward.
+        level_confirmed = False
         try:
-            level = level[0][0]
+            level = req_text("World.Search.ItemLevel")[0][0]
             if level != str(node_level):
                 _set_search_level(node_level)
+                time.sleep(0.5)
+                recheck = req_text("World.Search.ItemLevel")
+                level_confirmed = recheck[0][0] == str(node_level)
+            else:
+                level_confirmed = True
         except Exception as e:
             print(f"Level reading Error, Continuing without reading the level...")
 
@@ -182,10 +191,23 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
                           and coords_after == coords_before)
                 if stayed and node_level > 1:
                     node_level -= 1
+                    indeterminate = 0
                     print(f"Search didn't move the camera, lowering node level to {node_level}")
                     if profile:
                         set_gather_node_level(profile, node_level)
                     continue
+                if coords_before is None or coords_after is None:
+                    # No evidence either way. Without a bound this loops
+                    # forever at an unusable level when the coordinate bar
+                    # keeps failing to OCR: after 3 indeterminate misses,
+                    # fall back one level for THIS RUN ONLY (not persisted —
+                    # persistence needs positive evidence or a deploy).
+                    indeterminate += 1
+                    if indeterminate >= 3 and node_level > 1:
+                        node_level -= 1
+                        indeterminate = 0
+                        print(f"No camera evidence 3x, trying level {node_level} this run (not persisted)")
+                        continue
                 i += 1
                 if i>=5:
                     i = 0
@@ -198,9 +220,10 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
         if equalize:
             tap_on_text("World.Deploy.Equalize", wait=2)
         tap_on_text("World.Deploy.Deploy", wait=2, sleep=0.5)
-        # A deploy at this level worked — remember it so the next run
-        # starts here instead of rediscovering it.
-        if profile:
+        # A deploy worked — remember the level so the next run starts here,
+        # but only when the UI verifiably showed this level (level_confirmed);
+        # otherwise the deploy may have used the field's previous value.
+        if profile and level_confirmed:
             set_gather_node_level(profile, node_level)
 
         i = i+1
