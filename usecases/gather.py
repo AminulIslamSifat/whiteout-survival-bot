@@ -1,5 +1,6 @@
 import time
 from core.recalibrate import recalibrate
+from core.player_profile import get_gather_node_level, set_gather_node_level
 
 from core.core import (
     req_ocr,
@@ -16,6 +17,24 @@ from cmd_program.screen_action import(
 )
 
 
+
+
+def enter_world_map(max_attempts=4):
+    """Verified world-map entry. The World/City toggle drops taps that land
+    during the zoom animation, so tap-then-assume races and the rest of the
+    task then runs against the city view. Read, tap, settle, re-read."""
+    for _ in range(max_attempts):
+        time.sleep(0.5)
+        title = req_text("World.City")
+        try:
+            if title[0][0].lower() == "city":
+                return True
+        except Exception:
+            pass
+        recalibrate()
+        tap_on_text("Home.World", wait=2)
+        time.sleep(3)
+    return False
 
 
 def wait_till_return(lowest_time=14400):
@@ -56,20 +75,35 @@ def wait_till_return(lowest_time=14400):
 
 
 
-def gather(remove_hero=False, equalize=True, lowest_time=14400):
+def _no_suitable_resource_shown():
+    """Full-frame OCR check for the game's 'no suitable resource' toast, shown
+    when a search finds no node at the requested level near this account."""
+    results = req_ocr(rois=None, name="gather.no_suitable_resource")
+    for item in results or []:
+        text = item.get("text", "").lower()
+        if "suitable" in text or "no resource" in text:
+            return True
+    return False
+
+
+def _set_search_level(level):
+    tap_screen(84.26, 86.22)
+    time.sleep(1)
+    input_text(str(level))
+
+
+def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
+           profile=None):
     print("Started Gathering...")
     search_box = [[0, 78.86, 100, 80.49]]
     gathering_nodes = ["meat", "wood", "coal", "iron", "coal", "iron"]
+    if node_level is None:
+        node_level = get_gather_node_level(profile) if profile else 8
+    node_level = int(node_level)
 
-    time.sleep(0.5)
-    title = req_text("World.City")
-    try:
-        title = title[0][0].lower()
-    except Exception as e:
-        print(f"Reading Error - {e}")
-    if title != "city":
-        recalibrate()
-        tap_on_text("Home.World", wait=2)
+    if not enter_world_map():
+        print("Couldn't reach the world map, Exiting the task...")
+        return
 
     wait_till_return(lowest_time=lowest_time)
 
@@ -106,10 +140,8 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
         level = req_text("World.Search.ItemLevel")
         try:
             level = level[0][0]
-            if level != "8":
-                tap_screen(84.26, 86.22)
-                time.sleep(1)
-                input_text("8")
+            if level != str(node_level):
+                _set_search_level(node_level)
         except Exception as e:
             print(f"Level reading Error, Continuing without reading the level...")
 
@@ -118,6 +150,16 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
         if status:
             status = tap_on_text("World.Search.Gather", wait=5)
             if not status:
+                # Adapt to the account: when the game says no suitable
+                # resource at this level, step down and retry the same node
+                # instead of cycling node types at a level that cannot work.
+                if node_level > 1 and _no_suitable_resource_shown():
+                    node_level -= 1
+                    print(f"No suitable resource, lowering node level to {node_level}")
+                    if profile:
+                        set_gather_node_level(profile, node_level)
+                    _set_search_level(node_level)
+                    continue
                 i += 1
                 if i>=5:
                     i = 0
@@ -130,6 +172,10 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
         if equalize:
             tap_on_text("World.Deploy.Equalize", wait=2)
         tap_on_text("World.Deploy.Deploy", wait=2, sleep=0.5)
+        # A deploy at this level worked — remember it so the next run
+        # starts here instead of rediscovering it.
+        if profile:
+            set_gather_node_level(profile, node_level)
 
         i = i+1
         if i>=5:
@@ -159,17 +205,11 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
 
 
 def recall_current_gathering(lowest_time=14400):
-    time.sleep(0.5)
-    title = req_text("World.City")
     recalling = False
-    try:
-        title = title[0][0].lower()
-    except Exception as e:
-        print(f"Reading Error - {e}")
-    if title != "city":
-        recalibrate()
-        tap_on_text("Home.World", sleep=2)
-    
+    if not enter_world_map():
+        print("Couldn't reach the world map, Skipping the recall check...")
+        return False
+
     time.sleep(0.5)
     march_time = req_text("World.FirstMarchTime")
     try:

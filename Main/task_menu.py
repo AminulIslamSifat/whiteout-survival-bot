@@ -30,6 +30,7 @@ from usecases.chief_order import activate_chief_order
 from usecases.pet import collect_ally_treasure, start_pet_exploration
 from usecases.labyrinth import labyrinth
 from usecases.gather import gather
+from core.player_profile import load_profile
 
 
 @dataclass(frozen=True)
@@ -48,11 +49,12 @@ def _normalize(text):
 
 
 def _run_gather(current_player_id):
+    profile = load_profile(current_player_id)
     if current_player_id == "578380047":
-        gather(remove_hero=True, equalize=False)
+        gather(remove_hero=True, equalize=False, profile=profile)
         return
 
-    gather(remove_hero=False, equalize=True)
+    gather(remove_hero=False, equalize=True, profile=profile)
 
 
 TASKS = [

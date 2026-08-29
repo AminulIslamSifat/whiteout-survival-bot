@@ -77,6 +77,7 @@ from core.recalibrate import recalibrate
 from core.change_player import change_account, change_character
 
 from Main.task_menu import prompt_task_selection, run_selected_tasks
+from core.player_profile import load_profile, save_profile
 
 
 
@@ -304,6 +305,18 @@ def player_initialization():
         raise RuntimeError("Player Initialization Failed, Stopping the Bot...")
 
     current_player = Player(name, id_val, state, current_email)
+
+    # Seed/refresh the on-disk profile (db/players/<id>.json, example.json
+    # schema) with what this session observed; tasks read evolving fields
+    # (e.g. gather node level) from it.
+    profile = load_profile(id_val)
+    profile["name"] = name
+    if state:
+        profile["state"] = state
+    if furnace:
+        profile["furnace_level"] = int(furnace)
+    save_profile(profile)
+
     console.print(Panel.fit(
         f"Email: {current_email}\nName:{name}\nID: {id_val}\nFurnace Level: {furnace}\nState: {state}",
         title="[bold magenta]🎮 Player Summary[/bold magenta]",
