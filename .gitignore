@@ -19,3 +19,4 @@ db/players/*.json
 
 # Ralph loop scratch state (session tooling, not project code)
 .claude/
+db/completion_log.txt
