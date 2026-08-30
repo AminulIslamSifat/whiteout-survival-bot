@@ -52,3 +52,6 @@ Deferred work with context. Each entry carries enough reasoning to pick up cold.
 - **Context:** E-3A oracle; emulator was offline at implementation time, so
   v1 ships with the committed legacy frame as the oracle. Do on next bot run.
 - **Effort:** S (CC ~30min with emulator up). **Priority:** P2.
+
+## Completed
+(nothing yet — entries move here when a shipped diff completes them)
