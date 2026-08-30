@@ -54,7 +54,8 @@ def wait_till_return(lowest_time=14400):
                 "World.ThirdMarchTime", 
                 "World.FourthMarchTime", 
                 "World.FifthMarchTime"
-            ]
+            ],
+            read_kind="value"
         )
         times = []
         for i, return_time in enumerate(return_times):
@@ -89,7 +90,7 @@ def _read_map_coords():
     """Read the world-map coordinate bar. A successful search jumps the camera
     (coords change); 'No suitable resources' leaves it in place — that camera
     jump is the reliable found/not-found signal, not the transient toast."""
-    results = req_ocr(rois=MAP_COORDS_ROI, name="gather.map_coords")
+    results = req_ocr(rois=MAP_COORDS_ROI, name="gather.map_coords", read_kind="value")
     for item in results or []:
         text = item.get("text", "")
         if "X:" in text or "Y:" in text:
@@ -127,7 +128,7 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
 
     try:
         time.sleep(0.5)
-        data = req_text('World.MarchQueue')[0][0].split('/')
+        data = req_text('World.MarchQueue', read_kind="value")[0][0].split('/')
         remaining_march = int(data[1]) - int(data[0])
         occupied_march = int(data[0])
     except Exception as e:
@@ -162,11 +163,11 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
         # otherwise OCR failures ratchet the stored level upward.
         level_confirmed = False
         try:
-            level = req_text("World.Search.ItemLevel")[0][0]
+            level = req_text("World.Search.ItemLevel", read_kind="value")[0][0]
             if level != str(node_level):
                 _set_search_level(node_level)
                 time.sleep(0.5)
-                recheck = req_text("World.Search.ItemLevel")
+                recheck = req_text("World.Search.ItemLevel", read_kind="value")
                 level_confirmed = recheck[0][0] == str(node_level)
             else:
                 level_confirmed = True
@@ -232,7 +233,7 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
 
         try:
             time.sleep(0.5)
-            data = req_text('World.MarchQueue')[0][0].split('/')
+            data = req_text('World.MarchQueue', read_kind="value")[0][0].split('/')
             remaining_march = int(data[1]) - int(data[0])
             occupied_march = int(data[0])
         except Exception as e:
@@ -260,7 +261,7 @@ def recall_current_gathering(lowest_time=14400):
         return False
 
     time.sleep(0.5)
-    march_time = req_text("World.FirstMarchTime")
+    march_time = req_text("World.FirstMarchTime", read_kind="value")
     try:
         march_time = march_time[0][0].split(':')
         march_time = [int(t) for t in march_time]

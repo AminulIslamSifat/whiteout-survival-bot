@@ -33,7 +33,7 @@ def recall_current_march(lowest_time=14400):
         recalibrate()
         tap_on_text("Home.World", sleep=2)
     
-    time = req_text("World.FirstMarchTime")
+    time = req_text("World.FirstMarchTime", read_kind="value")
     try:
         time = time[0][0].split(':')
         time = [int(t) for t in time]
@@ -60,7 +60,8 @@ def wait_till_return(lowest_time=14400):
                 "World.ThirdMarchTime", 
                 "World.FourthMarchTime", 
                 "World.FifthMarchTime"
-            ]
+            ],
+            read_kind="value"
         )
         times = []
         for i, return_time in enumerate(return_times):
@@ -104,7 +105,7 @@ def beast_intel():
             if not found:
                 continue
             try:
-                data = req_text('World.MarchQueue')[0][0].split('/')
+                data = req_text('World.MarchQueue', read_kind="value")[0][0].split('/')
                 remaining_march = int(data[1]) - int(data[0])
             except Exception as e:
                 print(f"Reading Error - {e}")

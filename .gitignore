@@ -22,3 +22,5 @@ db/players/*.json
 db/completion_log.txt
 .DS_Store
 .pytest_cache/
+tests/fixtures/local/
+logs/

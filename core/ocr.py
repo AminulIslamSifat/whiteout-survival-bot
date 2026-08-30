@@ -1033,6 +1033,7 @@ def run_ocr(
         "decision_id": decision_id,
         "name": name,
         "read_kind": read_kind,
+        "expected": bool(expected_text),
         "engines": engines_used,
         "fallback_hits": fallback_hits,
         "digit_mismatch": bool(mismatches),

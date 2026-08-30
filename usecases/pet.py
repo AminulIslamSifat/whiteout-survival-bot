@@ -50,7 +50,7 @@ def start_pet_exploration():
     
     tap_on_text("Home.Pet.Skill.BeastCage", sleep=1, wait=2)
     tap_on_text("Home.Pet.BeastCage.Adventure", wait=2, sleep=2)
-    text = req_text(["Home.Pet.BeastCage.Adventure.RemainingAttempt", "Home.Pet.BeastCage.Adventrue.AdventureGround"])
+    text = req_text(["Home.Pet.BeastCage.Adventure.RemainingAttempt", "Home.Pet.BeastCage.Adventrue.AdventureGround"], read_kind="value")
     
     adventuring = 0
     remaining_attempts = 4
@@ -76,7 +76,7 @@ def start_pet_exploration():
             tap_on_template("Global.Close", wait=2)
 
     while(adventuring<3 and remaining_attempts>0):
-        text = req_text(["Home.Pet.BeastCage.Adventure.RemainingAttempt", "Home.Pet.BeastCage.Adventrue.AdventureGround"])
+        text = req_text(["Home.Pet.BeastCage.Adventure.RemainingAttempt", "Home.Pet.BeastCage.Adventrue.AdventureGround"], read_kind="value")
         try:
             remaining_attempts = int(text[0][0])
             for t in text:
@@ -101,7 +101,7 @@ def start_pet_exploration():
                 for item in r:
                     boxes.append(item)
         
-        text = req_text("Home.Pet.BeastCage.Adventrue.AdventureGround")
+        text = req_text("Home.Pet.BeastCage.Adventrue.AdventureGround", read_kind="value")
         treasures = []
         for box in boxes:
             valid = True

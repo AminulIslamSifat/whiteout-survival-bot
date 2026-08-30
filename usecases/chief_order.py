@@ -25,7 +25,7 @@ def activate_chief_order():
     tap_on_template("Home.ChiefOrder", wait=2)
 
     time.sleep(1)
-    currency = req_text("Home.ChiefOrder.Currency")
+    currency = req_text("Home.ChiefOrder.Currency", read_kind="value")
     try:
         currency = currency[0][0].replace(",", "").replace(".", "")
         if currency.lower().endswith("m") and currency[:-1].isdigit():

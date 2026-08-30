@@ -122,7 +122,7 @@ def collect_triumph():
     for i in range(2):
         tap_on_template("Home.Alliance.Triumph.WeeklyAllianceTriumphChest", wait=2, sleep=0.5)
     
-    text = req_text("Home.Alliance.Triumph.ActivityTriumphPoints")
+    text = req_text("Home.Alliance.Triumph.ActivityTriumphPoints", read_kind="value")
     try:
         activity_points = text[0][0].split("/")
         activity_points  = [int(a.replace(",", "")) for a in activity_points]

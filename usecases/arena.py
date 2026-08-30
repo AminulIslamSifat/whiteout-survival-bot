@@ -34,7 +34,7 @@ def challenge_lowest_power():
     ]
     powers = []
     time.sleep(0.5)
-    res = req_ocr(rois=[[20.37, 33.13, 91.3, 68.7]])
+    res = req_ocr(rois=[[20.37, 33.13, 91.3, 68.7]], read_kind="value")
     try:
         for item in res:
             text = item.get("text", "")
@@ -89,7 +89,7 @@ def arena():
         return None
     tap_on_text("Home.Arena.Challenge", wait=2, sleep=1)
 
-    res = req_ocr(rois=[[27.78, 70.12, 61.57, 74.39]])
+    res = req_ocr(rois=[[27.78, 70.12, 61.57, 74.39]], read_kind="value")
 
     try:
         attempt = int(res[0]['text'].split(":")[1])
@@ -97,7 +97,7 @@ def arena():
         print(f"Attempt Reading error -{e}")
 
     while(attempt > 0):
-        res = req_ocr(rois=[[27.78, 70.12, 61.57, 74.39]])
+        res = req_ocr(rois=[[27.78, 70.12, 61.57, 74.39]], read_kind="value")
         try:
             attempt = int(res[0]['text'].split(":")[1]) - 1
             print(f"Remaining Challenge {attempt}")

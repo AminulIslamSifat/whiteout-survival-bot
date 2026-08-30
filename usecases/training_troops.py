@@ -94,7 +94,7 @@ def train_infantry(Amount=None):
 
     while(trained < Amount):
         time.sleep(0.5)
-        training_amount = req_text("Home.TroopTraining.TrainingAmount")
+        training_amount = req_text("Home.TroopTraining.TrainingAmount", read_kind="value")
         try:
             training_amount = int(training_amount[0][0])
             trained += training_amount
@@ -133,7 +133,7 @@ def train_lancer(Amount=None):
 
     while(trained < Amount):
         time.sleep(0.5)
-        training_amount = req_text("Home.TroopTraining.TrainingAmount")
+        training_amount = req_text("Home.TroopTraining.TrainingAmount", read_kind="value")
         try:
             training_amount = int(training_amount[0][0])
             trained += training_amount
@@ -172,7 +172,7 @@ def train_marksman(Amount=None):
 
     while(trained < Amount):
         time.sleep(0.5)
-        training_amount = req_text("Home.TroopTraining.TrainingAmount")
+        training_amount = req_text("Home.TroopTraining.TrainingAmount", read_kind="value")
         try:
             training_amount = int(training_amount[0][0])
             trained += training_amount

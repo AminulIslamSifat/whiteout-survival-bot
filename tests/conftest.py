@@ -18,6 +18,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 os.environ.setdefault("OCR_CAPTURE_TOOL", "adb")
 
+# Burn-in instrumentation writes logs/ocr_burnin.jsonl on every read; tests
+# must not pollute (or depend on) the real burn-in ledger.
+os.environ.setdefault("OCR_BURNIN", "0")
+
 # Importing Main.main pulls core.core, whose import-time init_database()
 # (core/core.py:754) opens references/*.json via relative paths — the same
 # repo-root-cwd requirement every real run has. Pin the cwd so collection

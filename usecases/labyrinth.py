@@ -91,7 +91,7 @@ def labyrinth():
                 remaining_attempts = 0
 
                 try:
-                    remaining_attempts = req_text("Home.Labyrinth.Challenge.Defeat.RemainingAttempts")
+                    remaining_attempts = req_text("Home.Labyrinth.Challenge.Defeat.RemainingAttempts", read_kind="value")
                     remaining_attempts = int(remaining_attempts[0][0])
                     if remaining_attempts > 5 or remaining_attempts == 0:
                         remaining_attempts = 0

@@ -250,7 +250,8 @@ def player_initialization():
             "ChiefProfile.PlayerID", 
             "ChiefProfile.FurnaceLevel", 
             "ChiefProfile.State"
-        ]
+        ],
+        read_kind="value"
     )
 
     # safer extraction/helpers

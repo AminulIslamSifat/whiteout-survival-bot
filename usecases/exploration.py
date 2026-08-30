@@ -60,7 +60,7 @@ def continue_exploring(stopping_level=None):
         if stopping_level:
             try:
                 time.sleep(0.5)
-                level = int(req_text("Home.Exploration.CurrentLevel")[0][0])
+                level = int(req_text("Home.Exploration.CurrentLevel", read_kind="value")[0][0])
             except Exception as e:
                 print(f"Level Reading Failed - {e}, Ending the task...")
                 return
