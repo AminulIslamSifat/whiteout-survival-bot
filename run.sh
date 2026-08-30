@@ -4,6 +4,9 @@ PORT="${WOS_ADB_PORT:-16384}"
 export WOS_ADB_SERIAL="127.0.0.1:$PORT"
 export OCR_CAPTURE_TOOL=adb
 export OCR_RAM_CAP_GB="${OCR_RAM_CAP_GB:-16}"
+# 8210, not 8000: a foreign dev server on 8000 answers /docs (fooling the
+# readiness gate below) while every /ocr call 404s — observed live 2026-08-30.
+export OCR_PORT="${OCR_PORT:-8210}"
 # Unbuffered stdout: when this script's output is piped (logging, watchdogs),
 # block buffering otherwise delays progress lines by minutes.
 export PYTHONUNBUFFERED=1
@@ -26,10 +29,10 @@ trap 'kill $OCR_PID 2>/dev/null' EXIT INT TERM
 
 # PaddleOCR downloads models on first run — wait for readiness, do not race it.
 for i in $(seq 1 120); do
-  curl -sf localhost:8000/docs >/dev/null && break
+  curl -sf "localhost:$OCR_PORT/docs" >/dev/null && break
   sleep 2
 done
-curl -sf localhost:8000/docs >/dev/null || { echo "FATAL: OCR server never came up"; exit 1; }
+curl -sf "localhost:$OCR_PORT/docs" >/dev/null || { echo "FATAL: OCR server never came up"; exit 1; }
 
 # Module form, not path form: running Main/main.py puts Main/ (not the repo
 # root) on sys.path[0], so `import cmd_program` fails. Same fix as core.ocr above.

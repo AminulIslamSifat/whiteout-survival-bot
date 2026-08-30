@@ -4,7 +4,7 @@ Exit criteria (docs/designs/vision-ocr-swap.md):
   - >= 7 days elapsed AND >= 2000 distinct expectation-carrying decisions
     (expected_text or read_kind=value; retries share a decision_id),
     capped at 14 days: past the cap, decide on available data.
-  - fallback rate < 1% of expectation-carrying decisions
+  - fallback rate < 1% of value-read decisions (labels never fall back)
   - zero unwaived DIGIT_MISMATCH decisions
     (waive by listing decision_ids, one per line, in logs/burnin_waivers.txt)
   - RSS growth: last-day median - first-day median < 200 MB
@@ -62,18 +62,21 @@ def compute_verdict(records, waivers=frozenset(), now=None):
         if not is_expectation(r):
             continue
         d = exp_decisions.setdefault(r.get("decision_id") or "unknown", {
-            "fallback": False, "mismatch": False,
+            "fallback": False, "mismatch": False, "value": False,
         })
         if r.get("fallback_hits"):
             d["fallback"] = True
         if r.get("digit_mismatch"):
             d["mismatch"] = True
+        if r.get("read_kind") == "value":
+            d["value"] = True
 
     n_decisions = len(exp_decisions)
+    value_decisions = sum(1 for d in exp_decisions.values() if d["value"])
     n_fallback = sum(1 for d in exp_decisions.values() if d["fallback"])
     mismatched = [k for k, d in exp_decisions.items() if d["mismatch"]]
     unwaived = [k for k in mismatched if k not in waivers]
-    fallback_rate = (n_fallback / n_decisions) if n_decisions else 0.0
+    fallback_rate = (n_fallback / value_decisions) if value_decisions else 0.0
 
     by_day = {}
     for r in records:
@@ -131,6 +134,7 @@ def compute_verdict(records, waivers=frozenset(), now=None):
         "reasons": reasons,
         "days": round(days, 2),
         "decisions": n_decisions,
+        "value_decisions": value_decisions,
         "fallback_rate": round(fallback_rate, 4),
         "mismatched": mismatched,
         "unwaived_mismatches": unwaived,

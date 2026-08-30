@@ -83,6 +83,10 @@ CPU_THREADS = min(os.cpu_count() or 1, 4)
 # Explicit OCR_ENGINE=vision on an unsupported platform fails loudly at boot.
 # OCR_ENGINE=paddle is the one-variable rollback for the Vision swap.
 OCR_ENGINE_ENV = "OCR_ENGINE"
+# Server port. run.sh defaults this to 8210 on macOS: port 8000 is a common
+# dev-server default and a foreign FastAPI there answers /docs, fooling the
+# readiness gate while every /ocr call 404s (observed live 2026-08-30).
+OCR_PORT = int(os.getenv("OCR_PORT", "8000"))
 OCR_SCORE_FLOOR = 0.8  # per-line confidence filter, shared by both engines
 # Burn-in instrumentation (Vision swap): per-read JSONL + Paddle shadow reads
 # on value reads. Default ON until the burn-in exit criteria are met
@@ -498,16 +502,23 @@ def _vision_recognize_unlocked(image):
 def _recognize_crop_unlocked(image, expected_text=None, read_kind=None):
     """One crop through the active engine, with the per-crop fallback rule.
 
-    Fallback: Vision yielded zero items AND the caller carries an expectation
-    (expected_text or read_kind=='value') -> one-shot Paddle read of the SAME
-    crop. Wrong-nonzero reads never fall back (caller fuzzy nets own those).
-    Returns (items, engine_used, fallback_hit).
+    Fallback: Vision yielded zero items AND read_kind=='value' -> one-shot
+    Paddle read of the SAME crop. Value reads target always-rendered numerics
+    (the isolated-badge-digit case Vision refuses), so zero items there means
+    "Vision missed it". expected_text alone does NOT trigger fallback: label
+    taps POLL for text that legitimately isn't on screen yet (first live run:
+    23/38 reads were absent-text polls where Paddle also found nothing — a
+    fallback there just doubles every poll tick and drags Paddle into RSS).
+    A genuinely present label Vision can't read costs one poll tick and is
+    absorbed by the client's retry/ROI-expansion machinery, same as a Paddle
+    miss today. Wrong-nonzero reads never fall back (caller fuzzy nets own
+    those). Returns (items, engine_used, fallback_hit).
     """
     if _active_engine() == "paddle":
         return _paddle_recognize_unlocked(image), "paddle", False
 
     items, _errored = _vision_recognize_unlocked(image)
-    if items or not (expected_text or read_kind == "value"):
+    if items or read_kind != "value":
         return items, "vision", False
     if _vision_disabled_session:
         # Breaker flipped mid-call: the paddle read below is the session engine now.
@@ -1121,5 +1132,5 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="127.0.0.1",
-        port=8000
+        port=OCR_PORT
     )

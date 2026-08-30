@@ -106,16 +106,18 @@ class TestPerCropFallback:
         ocr_mod._vision_exc_streak = 0
         ocr_mod._vision_disabled_session = False
 
-    def test_zero_items_with_expected_text_falls_back(self, clean_engine_state):
+    def test_zero_items_with_expected_text_does_NOT_fall_back(self, clean_engine_state):
+        # Label taps POLL for text that isn't on screen yet; a fallback there
+        # doubles every poll tick for nothing (first live run: 23/38 reads).
         self._arm(clean_engine_state, [[]])
-        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, expected_text="3")
-        assert fb is True and engine == "vision+fallback"
-        assert items[0]["text"] == "fallback!"
+        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, expected_text="Read & Claim")
+        assert items == [] and engine == "vision" and fb is False
 
     def test_zero_items_with_value_kind_falls_back(self, clean_engine_state):
         self._arm(clean_engine_state, [[]])
         items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, read_kind="value")
-        assert fb is True and items[0]["text"] == "fallback!"
+        assert fb is True and engine == "vision+fallback"
+        assert items[0]["text"] == "fallback!"
 
     def test_zero_items_without_expectation_stays_empty(self, clean_engine_state):
         self._arm(clean_engine_state, [[]])
@@ -129,18 +131,18 @@ class TestPerCropFallback:
 
     def test_models_absent_disables_fallback(self, clean_engine_state):
         self._arm(clean_engine_state, [[]], models_present=False)
-        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, expected_text="3")
+        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, read_kind="value")
         assert items == [] and fb is False
 
     def test_paddle_mode_bypasses_vision_entirely(self, clean_engine_state):
         self._arm(clean_engine_state, [[dict(VISION_ITEM)]])
         ocr_mod._resolved_engine = "paddle"
-        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, expected_text="x")
+        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, read_kind="value")
         assert engine == "paddle" and items[0]["text"] == "fallback!" and fb is False
 
     def test_exception_counts_as_zero_and_falls_back(self, clean_engine_state):
         self._arm(clean_engine_state, [VisionEngineError("boom")])
-        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, expected_text="x")
+        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, read_kind="value")
         assert fb is True and items[0]["text"] == "fallback!"
 
     def test_score_floor_applied_to_vision_items(self, clean_engine_state):

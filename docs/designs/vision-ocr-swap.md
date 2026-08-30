@@ -53,9 +53,12 @@ completeness 10/10) — not taken whole; its items were cherry-picked below.
   normalized bottom-left-origin boxes; the engine converts to pixel
   top-left-origin boxes identical to Paddle's output. A pytest case asserts
   box agreement within tolerance on ground-truth frames.
-- Fallback policy, stated completely: Paddle is invoked lazily ONLY when Vision
-  returns zero items AND the caller supplied expected text (the
-  detector-refusal case, e.g. isolated badge digits). Vision engine EXCEPTIONS
+- Fallback policy (amended 2026-08-30 after first live run): Paddle is
+  invoked lazily ONLY when Vision returns zero items on a read_kind=value
+  crop (the detector-refusal case, e.g. isolated badge digits). expected_text
+  alone does NOT trigger fallback — run 0 showed 23/38 reads were label POLLS
+  for text legitimately absent from screen, where fallback doubled every poll
+  tick, loaded Paddle for nothing, and polluted the fallback metric. Vision engine EXCEPTIONS
   (bridge errors, framework failures, malformed images) are logged and treated
   as zero-item results, subject to the same fallback rule; three consecutive
   exceptions flip the session to paddle with a loud log line. Non-empty

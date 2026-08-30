@@ -35,7 +35,8 @@ got wrong, every review, decision, and finding — lives in
    selected by `OCR_ENGINE` (unset = vision on macOS >= 13, paddle elsewhere);
    `core/core.py` matches icons with OpenCV templates from `references/icon/`.
    Reads whose text feeds numeric state are tagged `read_kind="value"`: a zero-item
-   Vision read falls back to a one-shot lazy Paddle read of the same crop, and during
+   Vision read on a value crop falls back to a one-shot lazy Paddle read of the same
+   crop (label polls never fall back — absent text is their normal state), and during
    burn-in every value read is shadow-checked by Paddle (`logs/ocr_burnin.jsonl`,
    verdict via `uv run python scripts/burnin_report.py`).
    **Rollback runbook:** `OCR_ENGINE=paddle ./run.sh` — one variable, restart, done.

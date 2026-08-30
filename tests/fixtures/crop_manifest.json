@@ -1,20 +1,90 @@
 {
-  "_comment": "Frozen expected-text oracle for the OCR fixture crop suite (E-3A). Boxes come from references/TextArea at test time; expected values were hand-verified against the frames on 2026-08-29. Frames with player IDs stay limited to what the repo already tracked; fresh ID-free captures extend this manifest (gitignored local dir: tests/fixtures/local/).",
-  "frames": {
-    "test/test.png": {
-      "roi_source": "references/TextArea/ChiefProfile.json",
-      "entries": {
-        "ChiefProfile.Title": {"expect": "Chief Profile"},
-        "ChiefProfile.CollectionGalleryRank": {"expect": "Bronze Medallion I"},
-        "ChiefProfile.PlayerName": {"expect": "[LAT]Shadow"},
-        "ChiefProfile.PlayerID": {"expect": "ID:578380047", "digits": "578380047"},
-        "ChiefProfile.FurnaceLevel": {"expect": "3", "digits": "3", "needs_fallback": true},
-        "ChiefProfile.Stamina": {"expect": "152/200", "digits": "152200"},
-        "ChiefProfile.State": {"expect": "#3429", "digits": "3429"},
-        "ChiefProfile.Skins": {"expect": "Skins"},
-        "ChiefProfile.Troops": {"expect": "Troops"},
-        "ChiefProfile.Leaderboard": {"expect": "Leaderboard"}
-      }
+ "_comment": "Frozen expected-text oracle for the OCR fixture crop suite (E-3A). Boxes come from references/TextArea at test time; expected values were hand-verified against the frames on 2026-08-29. Frames with player IDs stay limited to what the repo already tracked; fresh ID-free captures extend this manifest (gitignored local dir: tests/fixtures/local/).",
+ "frames": {
+  "test/test.png": {
+   "roi_source": "references/TextArea/ChiefProfile.json",
+   "entries": {
+    "ChiefProfile.Title": {
+     "expect": "Chief Profile"
+    },
+    "ChiefProfile.CollectionGalleryRank": {
+     "expect": "Bronze Medallion I"
+    },
+    "ChiefProfile.PlayerName": {
+     "expect": "[LAT]Shadow"
+    },
+    "ChiefProfile.PlayerID": {
+     "expect": "ID:578380047",
+     "digits": "578380047"
+    },
+    "ChiefProfile.FurnaceLevel": {
+     "expect": "3",
+     "digits": "3",
+     "needs_fallback": true
+    },
+    "ChiefProfile.Stamina": {
+     "expect": "152/200",
+     "digits": "152200"
+    },
+    "ChiefProfile.State": {
+     "expect": "#3429",
+     "digits": "3429"
+    },
+    "ChiefProfile.Skins": {
+     "expect": "Skins"
+    },
+    "ChiefProfile.Troops": {
+     "expect": "Troops"
+    },
+    "ChiefProfile.Leaderboard": {
+     "expect": "Leaderboard"
     }
+   }
+  },
+  "tests/fixtures/home_night.png": {
+   "roi_source": "references/TextArea/Home.json",
+   "entries": {
+    "Home.Survivor": {
+     "expect": "10/12",
+     "digits": "1012"
+    },
+    "Home.Coal": {
+     "expect": "58.9K",
+     "digits": "589"
+    },
+    "Home.Gems": {
+     "expect": "1,053",
+     "digits": "1053"
+    },
+    "Home.Power": {
+     "expect": "102,481",
+     "digits": "102481"
+    },
+    "Home.Events": {
+     "expect": "Events"
+    },
+    "Home.Deal": {
+     "expect": "Deals"
+    },
+    "Home.Exploration": {
+     "expect": "Exploration"
+    },
+    "Home.Heroes": {
+     "expect": "Heroes"
+    },
+    "Home.Backpack": {
+     "expect": "Backpack"
+    },
+    "Home.Shop": {
+     "expect": "Shop"
+    },
+    "Home.Alliance": {
+     "expect": "Alliance"
+    },
+    "Home.World": {
+     "expect": "World"
+    }
+   }
   }
+ }
 }

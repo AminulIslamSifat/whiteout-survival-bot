@@ -17,9 +17,10 @@ from core.coord_utils import box_percent_to_pixel
 
 
 
-ocr_url = "http://127.0.0.1:8000/ocr"
-template_matching_url = "http://127.0.0.1:8000/template"
-cache_clearing_url = "http://127.0.0.1:8000/clear_cache"
+_OCR_PORT = os.getenv("OCR_PORT", "8000")
+ocr_url = f"http://127.0.0.1:{_OCR_PORT}/ocr"
+template_matching_url = f"http://127.0.0.1:{_OCR_PORT}/template"
+cache_clearing_url = f"http://127.0.0.1:{_OCR_PORT}/clear_cache"
 
 OCR_HTTP_TIMEOUT_SEC = float(os.getenv("OCR_HTTP_TIMEOUT_SEC", "8"))
 OCR_REPLAY_WAIT_SEC = float(os.getenv("OCR_REPLAY_WAIT_SEC", "35"))
