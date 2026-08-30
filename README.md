@@ -5,8 +5,10 @@
 ![Status](https://img.shields.io/badge/Status-v1%20daily%20loop%20verified-green?style=flat-square)
 
 Automation suite for Whiteout Survival, ported to Apple Silicon Macs running the game
-in **MuMuPlayer Pro** over **adb**. Vision is PaddleOCR (text) + OpenCV template
-matching (icons), with `rapidfuzz` absorbing OCR misreads.
+in **MuMuPlayer Pro** over **adb**. Text OCR runs on **Apple Vision**
+(`VNRecognizeTextRequest`, Neural Engine, ~17ms/crop) with PaddleOCR as the guarded
+fallback/rollback engine; icons use OpenCV template matching, with `rapidfuzz`
+absorbing OCR misreads.
 
 This is a fork of the upstream Linux/Windows bot, pinned to upstream `c7951f19`
 (tagged 0.8.0) on branch `mac-port`. The full port record — what the original brief
@@ -28,9 +30,17 @@ got wrong, every review, decision, and finding — lives in
 
 ## How it works
 
-1. **Vision engine** — a local FastAPI OCR server (`core/ocr.py`, port 8000) reads text
-   with PaddleOCR; `core/core.py` matches icons with OpenCV templates from
-   `references/icon/`.
+1. **OCR engine** — a local FastAPI OCR server (`core/ocr.py`, port 8000) reads text
+   with Apple Vision (`core/vision_engine.py`, request revision pinned) or PaddleOCR,
+   selected by `OCR_ENGINE` (unset = vision on macOS >= 13, paddle elsewhere);
+   `core/core.py` matches icons with OpenCV templates from `references/icon/`.
+   Reads whose text feeds numeric state are tagged `read_kind="value"`: a zero-item
+   Vision read falls back to a one-shot lazy Paddle read of the same crop, and during
+   burn-in every value read is shadow-checked by Paddle (`logs/ocr_burnin.jsonl`,
+   verdict via `uv run python scripts/burnin_report.py`).
+   **Rollback runbook:** `OCR_ENGINE=paddle ./run.sh` — one variable, restart, done.
+   Fresh machines: prefetch Paddle models once (`uv run python -c "from paddleocr import PaddleOCR; PaddleOCR(lang='en')"`)
+   — the bot never downloads models mid-session.
 2. **Percentage-based ROIs** — screen regions in `references/TextArea/*.json` are
    percentages against the canonical 1080×2460 base declared in `core/coord_utils.py`.
    The bot is *not* pixel-hardcoded, but the emulator must present a 1080×2460
@@ -92,8 +102,9 @@ cp db/account.json.example db/account.json
    `OCR_CAPTURE_TOOL=adb` (no scrcpy/v4l2 needed on macOS).
 2. **Gates on the real framebuffer**: takes a screencap and exits unless it is
    exactly 1080×2460 — `wm size` output is not trusted.
-3. Starts the OCR server and waits for it to come up (PaddleOCR downloads models on
-   first run; this can take a while once).
+3. Starts the OCR server and waits for it to come up (seconds under the vision
+   engine; under `OCR_ENGINE=paddle`, PaddleOCR downloads models on first run,
+   which can take a while once).
 4. Launches the bot as `python -m Main.main` and opens the interactive task selector.
 
 ---
@@ -157,6 +168,8 @@ Environment knobs (all optional, defaults set by `run.sh`):
 | `WOS_ADB_PORT` | `16384` | MuMu instance adb port |
 | `WOS_ADB_SERIAL` | `127.0.0.1:16384` | Fails loudly if set but the device is absent — no silent fallback |
 | `OCR_CAPTURE_TOOL` | `adb` | Bypasses the Linux scrcpy/v4l2 path entirely |
+| `OCR_ENGINE` | unset | `vision` (default on macOS >= 13) or `paddle` — the one-variable rollback |
+| `OCR_BURNIN` | `1` | Per-read JSONL + Paddle shadow-checks on value reads; flip to `0` after burn-in exit |
 | `OCR_RAM_CAP_GB` | `16` | RAM guard reports honestly; the engine-recycle actuator stays dormant on macOS |
 
 ---
