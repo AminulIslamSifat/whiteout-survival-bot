@@ -16,6 +16,7 @@ dependencies = [
     "rapidfuzz>=3.14.5",
     "rich>=15.0.0",
     "psutil>=7.2.2",
+    "pyobjc-framework-vision>=10.0 ; sys_platform == 'darwin'",
 ]
 
 [dependency-groups]
