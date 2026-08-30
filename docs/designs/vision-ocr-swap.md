@@ -69,12 +69,16 @@ completeness 10/10) — not taken whole; its items were cherry-picked below.
   are already cached at ~/.paddleocr/whl; measured lazy-init with cache is
   ~0.3s, not a download. Fresh machines: one-time prefetch documented in setup.
 - Confidence filter: the server-side per-line `score > 0.8` filter
-  (core/ocr.py:737) is kept. Cross-engine validity was measured, not assumed:
+  (`OCR_SCORE_FLOOR` in core/ocr.py, shared by both engines) is kept. Cross-engine validity was measured, not assumed:
   Vision accurate scored 1/90 results below 0.8 (median 1.00) in the bake-off.
 - Merge gate (decided in deep review, D-2B): a deterministic fixed-frame
-  suite — the 4 bake-off fixture frames (~60-80 ground-truth entries) with
-  Vision's fuzzy>=80 rate >= Paddle's on the same frames — plus the existing
-  ~90s single-account live smoke. Coverage grows during burn-in as screens
+  suite — planned as the 4 bake-off fixture frames (~60-80 ground-truth
+  entries); as shipped, 2 committed frames / 22 entries
+  (tests/fixtures/crop_manifest.json — the emulator was offline at
+  implementation time, so only ID-free frames the repo already tracked could
+  be frozen; fresh captures are queued in TODOS.md) with Vision's fuzzy>=80
+  rate >= Paddle's on the same frames — plus the existing ~90s single-account
+  live smoke. Coverage grows during burn-in as screens
   are visited naturally; the full 355-entry screen-walk suite is explicitly
   NOT the merge gate (brittle, game-state dependent).
 - Burn-in observability: every read logs engine, per-call latency, fallback
@@ -94,9 +98,11 @@ completeness 10/10) — not taken whole; its items were cherry-picked below.
   review; fallback rate >=1% at week's end -> reopen scope item 3
   (template-digit fallback) with the data, burn-in continues under vision.
   Exit with all criteria met reopens the Paddle-removal decision.
-- run.sh: readiness poll stays; it mirrors the engine default matrix, so the
-  120x2s cap drops to 30x2s whenever the RESOLVED engine is vision (not only
-  when OCR_ENGINE=vision is explicitly set).
+- run.sh: readiness poll stays at a flat 120x2s ceiling (the engine-aware
+  30x2s reduction was dropped per outside-voice decision 5A below — the loop
+  breaks the moment the server answers, so vision boots never approach the
+  cap). As shipped, run.sh also gained a pre-spawn port check and an
+  orphan-server guard on the dedicated `OCR_PORT` (default 8210).
 
 ### Outside-voice decisions (cross-model review, all accepted)
 - 3A: value-read call sites tag read_kind=value; zero-item value reads fall
@@ -120,7 +126,7 @@ completeness 10/10) — not taken whole; its items were cherry-picked below.
 
 | # | Proposal | Effort | Decision | Reasoning |
 |---|----------|--------|----------|-----------|
-| 1 | Fix clipped ChiefProfile.Stamina ground-truth box | S | ACCEPTED | Latent bot bug; clips the input for BOTH engines; widen x2 ~20.56% -> ~23.5% and re-verify via the crop suite |
+| 1 | Fix clipped ChiefProfile.Stamina ground-truth box | S | ACCEPTED | Latent bot bug; clips the input for BOTH engines; widen x2 ~20.56% -> 26.5% (as shipped in ChiefProfile.json) and re-verify via the crop suite |
 | 2 | Gate RAM-cap/recycle machinery to Paddle-active only | S | ACCEPTED | Dead weight on the Vision hot path; Vision leak risk is covered instead by autorelease pools + RSS in burn-in logs |
 | 3 | Digit-template fallback replacing Paddle entirely | M | SKIPPED | Paddle fallback is proven; reopen only if burn-in FAILS its fallback-rate criterion (>=1%) |
 | 4 | 2x render probe (2160x4920 @ 840dpi, same dp layout) | M | ACCEPTED, sequenced POST-burn-in | Vision thrives on high-res input; bounded probe, criteria below |

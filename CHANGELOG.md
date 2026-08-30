@@ -14,7 +14,8 @@ Apple Vision OCR engine, live-verified end to end.
   one command (`./run.sh`) pins the device, gates on the real framebuffer
   (1080×2460), boots the OCR service, and opens the task selector.
 - **Apple Vision OCR engine**: text reads now run on the Neural Engine in
-  ~17ms per region (vs ~63ms–2.7s under PaddleOCR), with the recognition
+  ~17ms per region (vs ~63ms under PaddleOCR; full-frame sweeps drop from
+  ~1–2.7s to ~90–380ms), with the recognition
   revision pinned so macOS updates can't silently change behavior. Rollback
   is one variable: `OCR_ENGINE=paddle`.
 - **Self-healing reads**: a broken Vision session falls back to PaddleOCR

@@ -1,6 +1,6 @@
 # ❄️ Whiteout Survival Autopilot — Mac Port (WOS-Bot)
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python)
+![Python](https://img.shields.io/badge/Python-3.12%2B-blue?style=flat-square&logo=python)
 ![Platform](https://img.shields.io/badge/Platform-macOS%20(Apple%20Silicon)-blueviolet?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-v1%20daily%20loop%20verified-green?style=flat-square)
 
@@ -21,7 +21,7 @@ got wrong, every review, decision, and finding — lives in
 
 - **v1 daily loop verified live**: mail collected, gather deployed with an adaptive
   per-player node level, and an immediate re-run correctly skips on cooldown.
-- **Offline test suite**: `uv run pytest tests/ -q` → 40 passed. No emulator, no adb,
+- **Offline test suite**: `uv run pytest tests/ -q` → 146 passed. No emulator, no adb,
   no network needed.
 - Linux-only paths (scrcpy/v4l2 streaming) are untouched but unused on macOS —
   the launcher forces `OCR_CAPTURE_TOOL=adb`.
@@ -30,7 +30,8 @@ got wrong, every review, decision, and finding — lives in
 
 ## How it works
 
-1. **OCR engine** — a local FastAPI OCR server (`core/ocr.py`, port 8000) reads text
+1. **OCR engine** — a local FastAPI OCR server (`core/ocr.py`, port 8210 under
+   `run.sh` — see `OCR_PORT` below) reads text
    with Apple Vision (`core/vision_engine.py`, request revision pinned) or PaddleOCR,
    selected by `OCR_ENGINE` (unset = vision on macOS >= 13, paddle elsewhere);
    `core/core.py` matches icons with OpenCV templates from `references/icon/`.
@@ -38,7 +39,10 @@ got wrong, every review, decision, and finding — lives in
    Vision read on a value crop falls back to a one-shot lazy Paddle read of the same
    crop (label polls never fall back — absent text is their normal state), and during
    burn-in every value read is shadow-checked by Paddle (`logs/ocr_burnin.jsonl`,
-   verdict via `uv run python scripts/burnin_report.py`).
+   verdict via `uv run python scripts/burnin_report.py [path-to-jsonl]`; waive
+   individual DIGIT_MISMATCH decisions by listing their decision_ids in
+   `logs/burnin_waivers.txt`; exit criteria in
+   [`docs/designs/vision-ocr-swap.md`](docs/designs/vision-ocr-swap.md)).
    **Rollback runbook:** `OCR_ENGINE=paddle ./run.sh` — one variable, restart, done.
    Fresh machines: prefetch Paddle models once (`uv run python -c "from paddleocr import PaddleOCR; PaddleOCR(lang='en')"`)
    — the bot never downloads models mid-session.
@@ -65,7 +69,7 @@ got wrong, every review, decision, and finding — lives in
 - Apple Silicon Mac
 - [MuMuPlayer Pro](https://www.mumuplayer.com/mac/) with Whiteout Survival installed
 - Homebrew `android-platform-tools` (adb) and `uv`
-- Python 3.10+ (managed by `uv`)
+- Python 3.12+ (managed by `uv` — `pyproject.toml` pins `requires-python >= 3.12`)
 
 ```bash
 brew install android-platform-tools uv
@@ -162,7 +166,8 @@ With exactly one configured email the bot never opens the account-switch (Google
 sign-in) flow: it runs one pass over that email's characters, prints
 `Single account configured (<email>) - pass complete, exiting.`, and exits 0.
 
-Environment knobs (all optional, defaults set by `run.sh`):
+Environment knobs (all optional; `run.sh` sets the first three, the rest default
+in code — `core/ocr.py`):
 
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
@@ -170,6 +175,7 @@ Environment knobs (all optional, defaults set by `run.sh`):
 | `WOS_ADB_SERIAL` | `127.0.0.1:16384` | Fails loudly if set but the device is absent — no silent fallback |
 | `OCR_CAPTURE_TOOL` | `adb` | Bypasses the Linux scrcpy/v4l2 path entirely |
 | `OCR_ENGINE` | unset | `vision` (default on macOS >= 13) or `paddle` — the one-variable rollback |
+| `OCR_PORT` | `8210` | OCR server port — dedicated so a dev server on 8000 can't impersonate it; `run.sh` refuses to start if anything already answers on it |
 | `OCR_BURNIN` | `1` | Per-read JSONL + Paddle shadow-checks on value reads; flip to `0` after burn-in exit |
 | `OCR_RAM_CAP_GB` | `16` | RAM guard reports honestly; the engine-recycle actuator stays dormant on macOS |
 
@@ -184,8 +190,9 @@ wos-bot/
 │   ├── main.py                 # Entry point, account loop, task execution
 │   └── task_menu.py            # Interactive task selector and registry
 ├── core/
-│   ├── ocr.py                  # FastAPI OCR server
-│   ├── core.py                 # Vision engine (template matching, OCR)
+│   ├── ocr.py                  # FastAPI OCR server (engine resolver, fallback, burn-in)
+│   ├── vision_engine.py        # Apple Vision text recognition (pinned revision)
+│   ├── core.py                 # Screen reading client (template matching, OCR calls)
 │   ├── coord_utils.py          # Canonical 1080×2460 base, percent↔pixel conversion
 │   ├── player_profile.py       # Per-player profile persistence (db/players/<id>.json)
 │   └── change_player.py        # Account/character switching
@@ -193,6 +200,8 @@ wos-bot/
 │   ├── screen_action.py        # ADB touch/swipe actions
 │   └── screen_stream.py        # scrcpy streaming (Linux-only, unused on macOS)
 ├── usecases/                   # Feature modules (gather, alliance, arena, …)
+├── scripts/
+│   └── burnin_report.py        # Burn-in go/no-go verdict from logs/ocr_burnin.jsonl
 ├── db/
 │   ├── account.json.example    # Safe template — the real account.json is gitignored
 │   ├── completion_log.txt      # Per-player cooldown store (gitignored)
@@ -201,7 +210,9 @@ wos-bot/
 │   ├── icon/                   # PNG templates for icon matching
 │   └── TextArea/               # Percentage-based ROI definitions per screen
 ├── tests/                      # Offline suite — no emulator/adb/network required
-└── docs/port/                  # Full Mac-port decision record (start at INDEX.md)
+└── docs/
+    ├── port/                   # Full Mac-port decision record (start at INDEX.md)
+    └── designs/                # Design records (vision-ocr-swap.md: engine swap + burn-in criteria)
 ```
 
 ---
@@ -225,9 +236,10 @@ way, and never share the real files.
 
 ## Troubleshooting
 
-- **OCR server never comes up** — first run downloads PaddleOCR models; `run.sh`
-  waits up to 4 minutes. If port 8000 is occupied: `lsof -i :8000`, kill the stale
-  process, rerun.
+- **OCR server never comes up** — under `OCR_ENGINE=paddle` the first run downloads
+  PaddleOCR models; `run.sh` waits up to 4 minutes. If the OCR port is occupied,
+  `run.sh` fails loudly before spawning: `lsof -i :8210`, kill the stale process
+  (or set `OCR_PORT`), rerun.
 - **adb device missing** — `adb kill-server && adb connect 127.0.0.1:16384`, and
   check the MuMu instance is running with adb enabled.
 - **Taps land wrong / OCR misses** — verify the framebuffer
@@ -236,7 +248,7 @@ way, and never share the real files.
 ## Testing
 
 ```bash
-uv run pytest tests/ -q    # 40 passed — fully offline
+uv run pytest tests/ -q    # 146 passed — fully offline
 ```
 
 ---
