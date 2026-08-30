@@ -83,3 +83,38 @@ def test_force_true_reprobes_even_when_cached(monkeypatch):
 
     monkeypatch.setattr(sa, "get_adb_devices", lambda: ["serial-b"])
     assert sa.resolve_device(force=True) == "serial-b"
+
+
+# ---- run_adb_command error propagation (no real adb: subprocess.run stubbed) ----
+
+def test_run_adb_command_no_device_raises_with_serial_hint(monkeypatch):
+    monkeypatch.setattr(sa, "get_adb_devices", lambda: [])
+    with pytest.raises(RuntimeError, match="no adb device available"):
+        sa.run_adb_command(["shell", "input", "tap", "1", "1"])
+
+
+def test_run_adb_command_failure_invalidates_cache_and_carries_stderr(monkeypatch):
+    import subprocess
+
+    monkeypatch.setattr(sa, "get_adb_devices", lambda: ["serial-a"])
+
+    def fake_run(cmd, **kwargs):
+        raise subprocess.CalledProcessError(
+            1, cmd, stderr="device 'serial-a' not found")
+
+    monkeypatch.setattr(sa.subprocess, "run", fake_run)
+    with pytest.raises(RuntimeError, match="device 'serial-a' not found"):
+        sa.run_adb_command(["shell", "input", "tap", "1", "1"])
+    # The failed device must be dropped so the next call re-probes.
+    assert sa._device_id is None
+
+
+def test_run_adb_command_missing_binary_raises_clearly(monkeypatch):
+    monkeypatch.setattr(sa, "get_adb_devices", lambda: ["serial-a"])
+
+    def fake_run(cmd, **kwargs):
+        raise FileNotFoundError("adb")
+
+    monkeypatch.setattr(sa.subprocess, "run", fake_run)
+    with pytest.raises(RuntimeError, match="adb binary not found"):
+        sa.run_adb_command(["shell", "input", "tap", "1", "1"])

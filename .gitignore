@@ -24,3 +24,4 @@ db/completion_log.txt
 .pytest_cache/
 tests/fixtures/local/
 logs/
+.gstack/

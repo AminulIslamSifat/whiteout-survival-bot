@@ -3,7 +3,9 @@ set -euo pipefail
 PORT="${WOS_ADB_PORT:-16384}"
 export WOS_ADB_SERIAL="127.0.0.1:$PORT"
 export OCR_CAPTURE_TOOL=adb
-export OCR_RAM_CAP_GB="${OCR_RAM_CAP_GB:-16}"
+# OCR_RAM_CAP_GB deliberately NOT exported here: the in-code default in
+# core/ocr.py is the single home for the RAM-cap dormancy switch (red-team
+# finding: a duplicate default here turns future in-code changes into no-ops).
 # 8210, not 8000: a foreign dev server on 8000 answers /docs (fooling the
 # readiness gate below) while every /ocr call 404s — observed live 2026-08-30.
 export OCR_PORT="${OCR_PORT:-8210}"
@@ -29,6 +31,9 @@ trap 'kill $OCR_PID 2>/dev/null' EXIT INT TERM
 
 # PaddleOCR downloads models on first run — wait for readiness, do not race it.
 for i in $(seq 1 120); do
+  # A dead child + a passing curl means an ORPHAN server from a previous run
+  # holds the port — the bot would run against stale code/env. Fail loudly.
+  kill -0 "$OCR_PID" 2>/dev/null || { echo "FATAL: OCR server exited during startup (port $OCR_PORT taken by an orphan?)"; exit 1; }
   curl -sf "localhost:$OCR_PORT/docs" >/dev/null && break
   sleep 2
 done

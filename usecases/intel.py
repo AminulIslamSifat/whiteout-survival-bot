@@ -33,7 +33,7 @@ def recall_current_march(lowest_time=14400):
         recalibrate()
         tap_on_text("Home.World", sleep=2)
     
-    time = req_text("World.FirstMarchTime", read_kind="value")
+    time = req_text("World.FirstMarchTime")
     try:
         time = time[0][0].split(':')
         time = [int(t) for t in time]
@@ -60,8 +60,7 @@ def wait_till_return(lowest_time=14400):
                 "World.ThirdMarchTime", 
                 "World.FourthMarchTime", 
                 "World.FifthMarchTime"
-            ],
-            read_kind="value"
+            ]
         )
         times = []
         for i, return_time in enumerate(return_times):

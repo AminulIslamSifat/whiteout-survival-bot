@@ -371,8 +371,18 @@ def resolve_engine():
 
 
 def _paddle_models_present():
+    """True only when det AND rec inference models are fully on disk.
+
+    any(iterdir()) would accept a .DS_Store or a partial prefetch, and the
+    first fallback would then download models mid-session while holding
+    _ocr_lock — the exact invariant the breaker path promises never happens."""
     whl = Path.home() / ".paddleocr" / "whl"
-    return whl.is_dir() and any(whl.iterdir())
+    if not whl.is_dir():
+        return False
+    return all(
+        any((whl / sub).rglob("inference.pdmodel")) or any((whl / sub).rglob("inference.pdiparams"))
+        for sub in ("det", "rec")
+    )
 
 
 def _build_paddle_engine():
@@ -526,8 +536,12 @@ def _recognize_crop_unlocked(image, expected_text=None, read_kind=None):
     if not _paddle_models_present():
         return items, "vision", False
     fallback_items = _paddle_recognize_unlocked(image)
-    if fallback_items:
-        console.print(f"[yellow]Vision zero-item fallback hit -> paddle read succeeded[/yellow]")
+    if not fallback_items:
+        # Both engines saw nothing: the value genuinely isn't on screen (an
+        # empty march slot, a bare panel). NOT a fallback hit — counting it
+        # would structurally inflate the burn-in fallback rate (red-team).
+        return [], "vision", False
+    console.print(f"[yellow]Vision zero-item fallback hit -> paddle read succeeded[/yellow]")
     return fallback_items, "vision+fallback", True
 
 
@@ -537,10 +551,17 @@ def _digits(text):
 
 def _shadow_compare_unlocked(image, vision_items):
     """Burn-in only: Paddle shadow read of the SAME crop, digit comparison.
-    Returns a mismatch dict or None. Caller holds _ocr_lock."""
+    Returns a mismatch dict or None. Caller holds _ocr_lock.
+
+    Instrumentation must never kill a real read: any Paddle failure here is
+    logged and swallowed — the caller keeps the successful vision items."""
     if not _paddle_models_present():
         return None
-    paddle_items = _paddle_recognize_unlocked(image)
+    try:
+        paddle_items = _paddle_recognize_unlocked(image)
+    except Exception as e:
+        console.print(f"[yellow]burn-in shadow read failed (vision result kept): {e}[/yellow]")
+        return None
     v_digits = _digits("".join(i["text"] for i in vision_items))
     p_digits = _digits("".join(i["text"] for i in paddle_items))
     if v_digits == p_digits:
@@ -553,11 +574,18 @@ def _shadow_compare_unlocked(image, vision_items):
     }
 
 
+BURNIN_LOG_MAX_BYTES = 50 * 1024 * 1024  # rotate at 50MB, one backup deep
+
+
 def _burnin_log(record):
     if not BURNIN_ENABLED:
         return
     try:
         BURNIN_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        if BURNIN_LOG_PATH.exists() and BURNIN_LOG_PATH.stat().st_size > BURNIN_LOG_MAX_BYTES:
+            rotated = BURNIN_LOG_PATH.with_name(f"ocr_burnin.{int(time.time())}.jsonl")
+            BURNIN_LOG_PATH.rename(rotated)
+            print(f"burn-in log rotated to {rotated.name} at {BURNIN_LOG_MAX_BYTES // (1024*1024)}MB")
         record["ts"] = time.time()
         record["rss_mb"] = round(_get_process_rss_bytes() / (1024 * 1024), 1)
         with open(BURNIN_LOG_PATH, "a") as f:

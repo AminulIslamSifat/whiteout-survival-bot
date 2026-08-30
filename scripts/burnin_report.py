@@ -146,11 +146,16 @@ def compute_verdict(records, waivers=frozenset(), now=None):
 
 def main():
     log_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("logs/ocr_burnin.jsonl")
-    if not log_path.exists():
+    # Rotation must not reset measured burn-in progress: fold in every rotated
+    # segment (ocr_burnin.<epoch>.jsonl) alongside the live file.
+    segments = sorted(log_path.parent.glob(f"{log_path.stem}.*{log_path.suffix}"))
+    sources = [p for p in segments + [log_path] if p.exists()]
+    if not sources:
         print(f"no burn-in log at {log_path}")
         return 1
     waivers = load_waivers(log_path.parent / "burnin_waivers.txt")
-    result = compute_verdict(load_records(log_path), waivers)
+    records = [rec for p in sources for rec in load_records(p)]
+    result = compute_verdict(records, waivers)
     print(json.dumps(result, indent=2))
     return 0
 

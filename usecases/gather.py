@@ -54,8 +54,7 @@ def wait_till_return(lowest_time=14400):
                 "World.ThirdMarchTime", 
                 "World.FourthMarchTime", 
                 "World.FifthMarchTime"
-            ],
-            read_kind="value"
+            ]
         )
         times = []
         for i, return_time in enumerate(return_times):
@@ -194,7 +193,11 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400, node_level=None,
                     node_level -= 1
                     indeterminate = 0
                     print(f"Search didn't move the camera, lowering node level to {node_level}")
-                    if profile:
+                    # Persist only when the UI verifiably showed the level that
+                    # was searched (level_confirmed) — an unconfirmed search may
+                    # have run at a stale field value, so attributing the miss
+                    # to node_level would persist a bogus decrement (red-team).
+                    if profile and level_confirmed:
                         set_gather_node_level(profile, node_level)
                     continue
                 if coords_before is None or coords_after is None:
@@ -261,7 +264,7 @@ def recall_current_gathering(lowest_time=14400):
         return False
 
     time.sleep(0.5)
-    march_time = req_text("World.FirstMarchTime", read_kind="value")
+    march_time = req_text("World.FirstMarchTime")
     try:
         march_time = march_time[0][0].split(':')
         march_time = [int(t) for t in march_time]

@@ -1,9 +1,10 @@
 """Burn-in verdict math on synthetic ledgers (scripts/burnin_report.py)."""
+import json
 import time
 
 import pytest
 
-from scripts.burnin_report import compute_verdict, DAY_S
+from scripts.burnin_report import compute_verdict, load_records, load_waivers, DAY_S
 
 
 NOW = time.time()
@@ -110,3 +111,47 @@ class TestFourteenDayCap:
         records[0]["ts"] = NOW - 15 * DAY_S
         r = compute_verdict(records)
         assert "14-day cap" in r["verdict"]
+
+    def test_cap_reached_with_failing_criteria_exits_fail(self):
+        # Past the cap, a failing criterion is a hard FAIL, not IN PROGRESS.
+        records = _healthy_week()
+        records.append(_read(day=3, decision="bad1", mismatch=True))
+        records.append(_read(day=10, decision="recent"))
+        records[0]["ts"] = NOW - 15 * DAY_S
+        r = compute_verdict(records)
+        assert r["verdict"].startswith("EXIT: FAIL")
+        assert "14-day cap" in r["verdict"]
+
+
+class TestLedgerIO:
+    def test_load_records_skips_torn_lines(self, tmp_path):
+        # A process kill mid-append leaves a torn JSON line; the reader must
+        # keep every intact record around it.
+        p = tmp_path / "log.jsonl"
+        good = json.dumps({"ts": 1.0})
+        p.write_text(good + "\n" + '{"ts": 2.0, "trunca' + "\n\n" + good + "\n")
+        assert load_records(p) == [{"ts": 1.0}, {"ts": 1.0}]
+
+    def test_load_waivers_missing_file_is_empty(self, tmp_path):
+        assert load_waivers(tmp_path / "nope.txt") == set()
+
+    def test_load_waivers_strips_and_drops_blank_lines(self, tmp_path):
+        w = tmp_path / "burnin_waivers.txt"
+        w.write_text("abc\n\n  def \n")
+        assert load_waivers(w) == {"abc", "def"}
+
+
+class TestRotatedSegments:
+    def test_main_folds_rotated_segments_into_verdict(self, tmp_path, monkeypatch, capsys):
+        import sys as _sys
+        import scripts.burnin_report as br
+        live = tmp_path / "ocr_burnin.jsonl"
+        rotated = tmp_path / "ocr_burnin.1756500000.jsonl"
+        rotated.write_text(json.dumps(_read(0, "d-old")) + "\n")
+        live.write_text(json.dumps(_read(8, "d-new")) + "\n")
+        monkeypatch.setattr(_sys, "argv", ["burnin_report.py", str(live)])
+        assert br.main() == 0
+        out = json.loads(capsys.readouterr().out)
+        # Both segments counted: rotation must not reset measured progress.
+        assert out["total_reads"] == 2
+        assert out["decisions"] == 2

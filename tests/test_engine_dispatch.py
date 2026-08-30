@@ -3,6 +3,7 @@
 These tests manipulate core.ocr module globals with stub engines — no real
 Paddle or Vision inference runs here.
 """
+import json
 import sys
 
 import numpy as np
@@ -151,6 +152,17 @@ class TestPerCropFallback:
         items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG)
         assert items == []  # 0.5 < OCR_SCORE_FLOOR -> dropped
 
+    def test_breaker_trip_mid_call_uses_paddle_as_session_engine(self, clean_engine_state):
+        # Two errors already on the streak; THIS read's error trips the breaker
+        # during the call. The paddle read that follows is the session engine
+        # now ("paddle"), not a one-shot fallback ("vision+fallback").
+        self._arm(clean_engine_state, [VisionEngineError("boom")])
+        ocr_mod._vision_exc_streak = 2
+        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, read_kind="value")
+        assert engine == "paddle" and fb is False
+        assert items[0]["text"] == "fallback!"
+        assert ocr_mod._vision_disabled_session is True
+
 
 class TestShadowCompare:
     def test_digit_agreement_returns_none(self, clean_engine_state):
@@ -173,6 +185,95 @@ class TestShadowCompare:
         assert m is not None
         assert m["vision_digits"] == "102431" and m["paddle_digits"] == "102481"
 
+    def test_models_absent_skips_shadow_read(self, clean_engine_state):
+        clean_engine_state.setattr(ocr_mod, "_paddle_models_present", lambda: False)
+        clean_engine_state.setattr(
+            ocr_mod, "_paddle_recognize_unlocked",
+            lambda img: pytest.fail("shadow read must not run without paddle models"))
+        vision_items = [{"text": "123", "score": 1.0, "box": [0, 0, 1, 1]}]
+        assert ocr_mod._shadow_compare_unlocked(IMG, vision_items) is None
+
+
+class TestBurninLedger:
+    """The producer side of the burn-in contract: _burnin_log must emit the
+    keys scripts/burnin_report.py's verdict math consumes."""
+
+    def test_disabled_writes_nothing(self, clean_engine_state, tmp_path):
+        clean_engine_state.setattr(ocr_mod, "BURNIN_ENABLED", False)
+        clean_engine_state.setattr(ocr_mod, "BURNIN_LOG_PATH", tmp_path / "burnin.jsonl")
+        ocr_mod._burnin_log({"decision_id": "d1"})
+        assert not (tmp_path / "burnin.jsonl").exists()
+
+    def test_enabled_appends_record_with_ts_and_rss(self, clean_engine_state, tmp_path):
+        clean_engine_state.setattr(ocr_mod, "BURNIN_ENABLED", True)
+        clean_engine_state.setattr(ocr_mod, "BURNIN_LOG_PATH", tmp_path / "burnin.jsonl")
+        ocr_mod._burnin_log({"decision_id": "d1", "read_kind": "value",
+                             "expected": False, "fallback_hits": 0,
+                             "digit_mismatch": False})
+        rec = json.loads((tmp_path / "burnin.jsonl").read_text().splitlines()[0])
+        assert rec["decision_id"] == "d1"
+        # ts and rss_mb are stamped by the logger itself; compute_verdict
+        # keys on both (duration window and RSS-growth criterion).
+        assert "ts" in rec and "rss_mb" in rec
+
+
+class TestRunOcrPlumbing:
+    """run_ocr's ROI leg offline (img_path fixture, stub engine): pad/offset
+    box math back into frame space, and the burn-in record it emits."""
+
+    def _arm(self, mp, tmp_path, items, shadow=None):
+        mp.setattr(ocr_mod, "BURNIN_ENABLED", True)
+        mp.setattr(ocr_mod, "BURNIN_LOG_PATH", tmp_path / "burnin.jsonl")
+        ocr_mod._paddle_engine = None  # RAM guard must stay a no-op
+        seen = {}
+
+        def fake_crop_read(image, expected_text=None, read_kind=None):
+            seen["shape"] = image.shape
+            return [dict(i) for i in items], "vision", False
+
+        mp.setattr(ocr_mod, "_recognize_crop_unlocked", fake_crop_read)
+        mp.setattr(ocr_mod, "_shadow_compare_unlocked", lambda img, it: shadow)
+        return seen
+
+    def test_roi_offsets_and_burnin_record(self, clean_engine_state, tmp_path):
+        seen = self._arm(clean_engine_state, tmp_path,
+                         [{"text": "42", "score": 0.99, "box": [60, 60, 80, 70]}])
+        results = ocr_mod.run_ocr(
+            img_path="tests/fixtures/home_night.png",
+            rois=[[100, 200, 300, 400]],
+            name="unit.roi", read_kind="value", decision_id="abc123",
+        )
+        # 200x200 crop + 50px pad on every side reaches the engine...
+        assert seen["shape"] == (300, 300, 3)
+        # ...and the crop-relative box is re-offset into frame space:
+        # x - pad + x1 = 60 - 50 + 100, y - pad + y1 = 60 - 50 + 200.
+        assert results == [{"text": "42", "score": 0.99, "box": [110, 210, 130, 220]}]
+
+        rec = json.loads((tmp_path / "burnin.jsonl").read_text().splitlines()[0])
+        assert rec["decision_id"] == "abc123"
+        assert rec["read_kind"] == "value"
+        assert rec["engines"] == ["vision"]
+        assert rec["fallback_hits"] == 0
+        assert rec["digit_mismatch"] is False
+        assert rec["results"] == 1
+
+    def test_shadow_mismatch_lands_in_record_with_roi_index(self, clean_engine_state, tmp_path):
+        mismatch = {"vision_digits": "102431", "paddle_digits": "102481",
+                    "vision_texts": ["102,431"], "paddle_texts": ["102,481"]}
+        self._arm(clean_engine_state, tmp_path,
+                  [{"text": "102,431", "score": 0.99, "box": [0, 0, 9, 9]}],
+                  shadow=mismatch)
+        results = ocr_mod.run_ocr(
+            img_path="tests/fixtures/home_night.png",
+            rois=[[100, 200, 300, 400]],
+            name="unit.mismatch", read_kind="value", decision_id="mm1",
+        )
+        assert results  # a mismatch flags the record, it does not eat the read
+        rec = json.loads((tmp_path / "burnin.jsonl").read_text().splitlines()[0])
+        assert rec["digit_mismatch"] is True
+        assert rec["mismatches"][0]["roi_index"] == 0
+        assert rec["mismatches"][0]["vision_digits"] == "102431"
+
 
 class TestRamCapGating:
     def test_noop_while_no_paddle_engine(self, clean_engine_state):
@@ -186,3 +287,17 @@ class TestRamCapGating:
         ocr_mod._paddle_engine = object()
         clean_engine_state.setattr(ocr_mod, "_get_process_rss_bytes", lambda: 1024)
         ocr_mod._enforce_ram_cap("test")  # under cap -> returns quietly
+
+
+class TestFallbackHonesty:
+    def test_zero_both_engines_is_not_a_fallback_hit(self, clean_engine_state):
+        # Empty march slot: Vision sees nothing, Paddle sees nothing. Counting
+        # that as a fallback hit structurally inflates the burn-in rate.
+        clean_engine_state.setattr(ocr_mod, "_vision_engine", _StubVision([[]]))
+        clean_engine_state.setattr(ocr_mod, "_paddle_models_present", lambda: True)
+        clean_engine_state.setattr(ocr_mod, "_paddle_recognize_unlocked", lambda img: [])
+        ocr_mod._resolved_engine = "vision"
+        ocr_mod._vision_exc_streak = 0
+        ocr_mod._vision_disabled_session = False
+        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, read_kind="value")
+        assert items == [] and engine == "vision" and fb is False
