@@ -25,6 +25,14 @@ from PIL import Image; import sys
 w,h = Image.open('/tmp/wos-gate.png').size
 sys.exit(0 if (w,h)==(1080,2460) else f'FATAL: framebuffer {w}x{h}, expected 1080x2460')"
 
+# Pre-spawn port check: if ANYTHING already answers on the OCR port, the new
+# child would die on bind while readiness curls hit the impostor (orphan from
+# a kill -9'd run, or a foreign app). Fail loudly instead (codex P2).
+if curl -sf -m 2 "localhost:$OCR_PORT/docs" >/dev/null 2>&1; then
+  echo "FATAL: port $OCR_PORT already answers — orphan OCR server or foreign app; kill it or set OCR_PORT"
+  exit 1
+fi
+
 uv run python -m core.ocr </dev/null &
 OCR_PID=$!
 trap 'kill $OCR_PID 2>/dev/null' EXIT INT TERM

@@ -527,9 +527,17 @@ def _recognize_crop_unlocked(image, expected_text=None, read_kind=None):
     if _active_engine() == "paddle":
         return _paddle_recognize_unlocked(image), "paddle", False
 
-    items, _errored = _vision_recognize_unlocked(image)
-    if items or read_kind != "value":
+    items, errored = _vision_recognize_unlocked(image)
+    if items:
         return items, "vision", False
+    if not errored and read_kind != "value":
+        # Clean zero-item read on a label poll: the text is absent, which is
+        # that read's normal state. No fallback.
+        return items, "vision", False
+    # Zero items on a value read, OR the engine itself ERRORED on any read:
+    # an engine failure is not "text absent" — without this, a broken Vision
+    # session leaves the bot blind on its first profile read, aborting the run
+    # before the 3-strike breaker can trip (codex P1).
     if _vision_disabled_session:
         # Breaker flipped mid-call: the paddle read below is the session engine now.
         return _paddle_recognize_unlocked(image), "paddle", False

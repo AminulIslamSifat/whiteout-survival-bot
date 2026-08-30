@@ -301,3 +301,31 @@ class TestFallbackHonesty:
         ocr_mod._vision_disabled_session = False
         items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, read_kind="value")
         assert items == [] and engine == "vision" and fb is False
+
+
+class TestErrorDrivenFallback:
+    def _arm(self, mp, vision_script, paddle_items, models_present=True):
+        mp.setattr(ocr_mod, "_vision_engine", _StubVision(vision_script))
+        mp.setattr(ocr_mod, "_paddle_models_present", lambda: models_present)
+        mp.setattr(ocr_mod, "_paddle_recognize_unlocked", lambda img: list(paddle_items))
+        ocr_mod._resolved_engine = "vision"
+        ocr_mod._vision_exc_streak = 0
+        ocr_mod._vision_disabled_session = False
+
+    def test_engine_error_falls_back_even_on_label_reads(self, clean_engine_state):
+        # A broken Vision session must self-heal via Paddle on ANY read —
+        # otherwise the first profile read aborts the run before the breaker
+        # trips (codex P1).
+        self._arm(clean_engine_state, [VisionEngineError("framework down")], [dict(FAKE_ITEM)])
+        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG)
+        assert items[0]["text"] == "fallback!" and engine == "vision+fallback"
+
+    def test_engine_error_with_empty_paddle_stays_empty_no_hit(self, clean_engine_state):
+        self._arm(clean_engine_state, [VisionEngineError("framework down")], [])
+        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG)
+        assert items == [] and fb is False
+
+    def test_clean_zero_label_read_still_never_falls_back(self, clean_engine_state):
+        self._arm(clean_engine_state, [[]], [dict(FAKE_ITEM)])
+        items, engine, fb = ocr_mod._recognize_crop_unlocked(IMG, expected_text="Read & Claim")
+        assert items == [] and engine == "vision" and fb is False
