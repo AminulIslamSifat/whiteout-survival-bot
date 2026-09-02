@@ -70,7 +70,29 @@ async def lifespan(app: FastAPI):
     logger.info("[Shutdown] Cleanup complete.")
 
 
-APP_VERSION = "0.2.0"
+def _read_project_version() -> str:
+    """Read version from pyproject.toml."""
+    toml_path = PROJECT_ROOT / "pyproject.toml"
+    try:
+        import tomllib
+        with open(toml_path, "rb") as f:
+            data = tomllib.load(f)
+        return data.get("project", {}).get("version", "0.0.0")
+    except Exception:
+        pass
+    # Fallback: regex parse
+    try:
+        import re
+        text = toml_path.read_text()
+        m = re.search(r'^\s*version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    return "0.0.0"
+
+
+APP_VERSION = _read_project_version()
 
 app = FastAPI(title="WOS-Bot Dashboard", version=APP_VERSION, lifespan=lifespan)
 
@@ -318,6 +340,18 @@ def _get_total_characters() -> int:
 @app.get("/api/status")
 async def get_status():
     adb_info = _get_adb_devices()
+    ocr_modules = _get_ocr_module_versions()
+    accounts = _load_accounts()
+    total_chars = sum(len(acc.get("player", [])) for acc in accounts.values())
+
+    # Determine readiness — collect all blocking issues
+    issues: list[str] = []
+    if not adb_info.get("connected"):
+        err = adb_info.get("error", "No device detected")
+        issues.append(f"ADB: {err}")
+    if not accounts:
+        issues.append("No accounts configured")
+
     return {
         "status": _bot_status,
         "current_player": _current_player,
@@ -328,9 +362,11 @@ async def get_status():
         "uptime": time.time() if _bot_status == "running" else None,
         "version": APP_VERSION,
         "adb": adb_info,
-        "ocr_modules": _get_ocr_module_versions(),
-        "total_accounts": len(_load_accounts()),
-        "total_characters": _get_total_characters(),
+        "ocr_modules": ocr_modules,
+        "total_accounts": len(accounts),
+        "total_characters": total_chars,
+        "ready": len(issues) == 0,
+        "issues": issues,
     }
 
 
@@ -415,7 +451,7 @@ async def start_bot(selection: TaskSelection):
 
 @app.post("/api/bot/stop")
 async def stop_bot():
-    global _bot_process, _bot_status
+    global _bot_process, _bot_status, _ocr_process, _ocr_status
 
     if _bot_status != "running":
         raise HTTPException(400, "Bot is not running")
@@ -434,6 +470,18 @@ async def stop_bot():
     _bot_status = "stopped"
     _current_task = ""
     _current_player = ""
+
+    # Stop OCR engine together with the bot
+    if _ocr_status == "running" and _ocr_process and _ocr_process.poll() is None:
+        await _broadcast_log("[Dashboard] Stopping OCR engine...")
+        _ocr_process.terminate()
+        try:
+            _ocr_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            _ocr_process.kill()
+    _ocr_process = None
+    _ocr_status = "stopped"
+
     await _broadcast_log("[Dashboard] Bot stopped.")
     return {"status": "stopped"}
 

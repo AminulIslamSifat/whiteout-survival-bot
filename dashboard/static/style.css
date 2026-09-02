@@ -270,9 +270,10 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 /* --- Stat Cards Grid --- */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--sp-5);
   margin-bottom: var(--sp-7);
+  width: 100%;
 }
 
 .stat-card {
@@ -282,6 +283,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   padding: var(--sp-6);
   transition: border-color 0.2s;
   box-shadow: var(--shadow-card);
+  min-width: 0;
 }
 .stat-card:hover { border-color: var(--border); }
 
@@ -302,6 +304,81 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+}
+
+.stat-detail {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: var(--sp-2);
+  line-height: 1.5;
+  word-break: break-all;
+}
+.stat-detail > div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Issues Banner --- */
+.issues-banner {
+  background: var(--danger-bg);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: var(--radius);
+  padding: var(--sp-5) var(--sp-6);
+  margin-bottom: var(--sp-6);
+  animation: fadeIn 0.3s ease;
+}
+.issues-banner.flash {
+  animation: flashBorder 0.6s ease 2;
+}
+.issues-banner-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.issues-banner-icon { font-size: 18px; flex-shrink: 0; }
+.issues-banner-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
+}
+.issues-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.issues-list li {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: var(--sp-1) 0;
+  padding-left: var(--sp-5);
+  position: relative;
+}
+.issues-list li::before {
+  content: '•';
+  position: absolute;
+  left: var(--sp-2);
+  color: var(--danger);
+}
+
+/* --- Blocked Start Button --- */
+.btn-warn {
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+}
+.btn-warn:hover {
+  background: color-mix(in srgb, var(--warn) 25%, transparent);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes flashBorder {
+  0%, 100% { border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+  50% { border-color: var(--danger); box-shadow: 0 0 12px color-mix(in srgb, var(--danger) 30%, transparent); }
 }
 
 /* --- Status Dots --- */
@@ -325,7 +402,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 /* --- Panels --- */
 .panel-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: var(--sp-5);
   margin-bottom: var(--sp-7);
 }
@@ -366,12 +443,15 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-card);
+  min-height: 0;
 }
 
 .log-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex: 0 0 auto;
+  min-height: 42px;
   padding: var(--sp-4) var(--sp-5);
   border-bottom: 1px solid var(--border-soft);
   background: var(--panel-2);
@@ -409,7 +489,13 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 }
 
 .dual-log-grid .log-panel {
-  min-height: 300px;
+  height: calc(100vh - 340px);
+  min-height: 400px;
+}
+
+.universal-log-wrapper .log-panel {
+  height: calc(100vh - 340px);
+  min-height: 400px;
 }
 
 .full-log .log-container {
@@ -803,7 +889,7 @@ select.form-input {
 
 /* --- Responsive --- */
 @media (max-width: 900px) {
-  .stats-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .panel-row { grid-template-columns: 1fr; }
   .dual-log-grid { grid-template-columns: 1fr; }
   .task-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
@@ -813,6 +899,6 @@ select.form-input {
   .activity-rail { width: 44px; min-width: 44px; }
   .rail-btn { width: 34px; height: 34px; }
   .view { padding: var(--sp-5); }
-  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .stats-grid { grid-template-columns: 1fr; }
   .modal { max-width: 100%; }
 }

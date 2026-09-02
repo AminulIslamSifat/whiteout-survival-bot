@@ -73,8 +73,9 @@ async function pollStatus() {
 function updateStatusUI(s) {
     const dotClass = s.status;
     const label = s.status.charAt(0).toUpperCase() + s.status.slice(1);
+    const isRunning = s.status === 'running' || s.status === 'starting';
 
-    // Bot Status + Version
+    // Status + Version
     document.getElementById('statStatus').innerHTML = `<span class="status-dot ${dotClass}"></span> ${label}`;
     const versionEl = document.getElementById('statVersion');
     if (versionEl) versionEl.textContent = `v${s.version || '0.0.0'}`;
@@ -83,41 +84,34 @@ function updateStatusUI(s) {
     const adb = s.adb || {};
     const adbEl = document.getElementById('statAdb');
     const adbDetailEl = document.getElementById('statAdbDetail');
-    const adbWarning = document.getElementById('adbWarning');
-    const adbWarningText = document.getElementById('adbWarningText');
 
     if (adb.connected) {
         const devIds = (adb.devices || []).map(d => d.id).join(', ');
         if (adbEl) adbEl.innerHTML = `<span class="status-dot running"></span> Connected`;
         if (adbDetailEl) adbDetailEl.textContent = devIds;
-        if (adbWarning) adbWarning.style.display = 'none';
     } else {
         const errMsg = adb.error || 'No device detected';
         if (adbEl) adbEl.innerHTML = `<span class="status-dot error"></span> Disconnected`;
         if (adbDetailEl) adbDetailEl.textContent = errMsg;
-        if (adbWarning) {
-            adbWarning.style.display = 'flex';
-            if (adbWarningText) adbWarningText.textContent = `⚠️ ${errMsg}. Connect a device via USB and ensure ADB debugging is enabled.`;
-        }
     }
 
-    // OCR Engine Status + Module Versions
+    // OCR Engine Status + Module Versions (no manual controls — stops with bot)
     const ocrStatus = s.ocr_status || 'stopped';
     const ocrLabel = ocrStatus.charAt(0).toUpperCase() + ocrStatus.slice(1);
     document.getElementById('statOcr').innerHTML = `
-        <span class="status-dot ${ocrStatus}"></span> ${ocrLabel}
-        <button class="btn-xs btn-primary" onclick="startOcr()" ${ocrStatus !== 'stopped' ? 'disabled' : ''} style="margin-left:8px">Start</button>
-        <button class="btn-xs btn-danger" onclick="stopOcr()" ${ocrStatus !== 'running' ? 'disabled' : ''} style="margin-left:4px">Stop</button>`;
+        <span class="status-dot ${ocrStatus}"></span> ${ocrLabel}`;
 
     const ocrModulesEl = document.getElementById('statOcrModules');
     if (ocrModulesEl && s.ocr_modules) {
         const mods = s.ocr_modules;
-        const parts = [];
-        if (mods.paddleocr) parts.push(`PaddleOCR ${mods.paddleocr}`);
-        if (mods.paddlepaddle) parts.push(`Paddle ${mods.paddlepaddle}`);
-        if (mods.opencv) parts.push(`OpenCV ${mods.opencv}`);
-        if (mods.rapidfuzz) parts.push(`RapidFuzz ${mods.rapidfuzz}`);
-        ocrModulesEl.textContent = parts.join(' · ') || '—';
+        const lines = [];
+        if (mods.paddleocr) lines.push(`PaddleOCR ${mods.paddleocr}`);
+        if (mods.paddlepaddle) lines.push(`Paddle ${mods.paddlepaddle}`);
+        if (mods.opencv) lines.push(`OpenCV ${mods.opencv}`);
+        if (mods.rapidfuzz) lines.push(`RapidFuzz ${mods.rapidfuzz}`);
+        ocrModulesEl.innerHTML = lines.length
+            ? lines.map(l => `<div>${l}</div>`).join('')
+            : '—';
     }
 
     // Total Accounts + Characters
@@ -126,23 +120,54 @@ function updateStatusUI(s) {
     if (accountsEl) accountsEl.textContent = s.total_accounts ?? 0;
     if (charsEl) charsEl.textContent = `${s.total_characters ?? 0} characters`;
 
+    // Issues banner
+    const issuesBanner = document.getElementById('issuesBanner');
+    const issuesList = document.getElementById('issuesList');
+    const issues = s.issues || [];
+    const ready = s.ready !== false;
+
+    if (!ready && issues.length > 0) {
+        if (issuesBanner) issuesBanner.style.display = 'block';
+        if (issuesList) {
+            issuesList.innerHTML = issues.map(i => `<li>${escapeHtml(i)}</li>`).join('');
+        }
+    } else {
+        if (issuesBanner) issuesBanner.style.display = 'none';
+    }
+
+    // Button states: hide Start when blocked, show blocked button instead
+    const btnStart = document.getElementById('btnStartBot');
+    const btnBlocked = document.getElementById('btnStartBlocked');
+    const btnStop = document.getElementById('btnStopBot');
+
+    if (isRunning) {
+        if (btnStart) btnStart.style.display = 'none';
+        if (btnBlocked) btnBlocked.style.display = 'none';
+        if (btnStop) btnStop.disabled = false;
+    } else if (!ready) {
+        // Not ready — hide normal start, show blocked button
+        if (btnStart) btnStart.style.display = 'none';
+        if (btnBlocked) btnBlocked.style.display = '';
+        if (btnStop) btnStop.disabled = true;
+    } else {
+        // Ready and not running — show normal start
+        if (btnStart) { btnStart.style.display = ''; btnStart.disabled = false; }
+        if (btnBlocked) btnBlocked.style.display = 'none';
+        if (btnStop) btnStop.disabled = true;
+    }
+
     // Update log panel status dots
     const botDot = s.status === 'running' ? 'running' : (s.status === 'starting' ? 'starting' : 'stopped');
     const ocrDot = ocrStatus === 'running' ? 'running' : (ocrStatus === 'starting' ? 'starting' : 'stopped');
 
-    ['dashBotDot', 'logBotDot'].forEach(id => {
+    ['logBotDot'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.className = `status-dot ${botDot}`;
     });
-    ['dashOcrDot', 'logOcrDot'].forEach(id => {
+    ['logOcrDot'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.className = `status-dot ${ocrDot}`;
     });
-
-    // Button states
-    const isRunning = s.status === 'running' || s.status === 'starting';
-    document.getElementById('btnStartBot').disabled = isRunning;
-    document.getElementById('btnStopBot').disabled = !isRunning;
 }
 
 // --- Dual SSE Log Streams ---
@@ -202,36 +227,45 @@ function shouldAutoScroll() {
     return document.getElementById('autoScrollToggle').checked;
 }
 
+function isImportantLog(line) {
+    const l = line.toLowerCase();
+    return l.includes('error') || l.includes('failed') || l.includes('❌') || l.includes('exception')
+        || l.includes('✅') || l.includes('completed') || l.includes('success')
+        || l.includes('[dashboard]') || l.includes('starting bot') || l.includes('bot stopped')
+        || l.includes('running tasks for:') || l.includes('running task:')
+        || l.includes('discovered') || l.includes('marked completed')
+        || l.includes('ocr') && (l.includes('start') || l.includes('stop') || l.includes('ready') || l.includes('error'));
+}
+
+function appendUniversalLog(line, source) {
+    if (!isImportantLog(line)) return;
+    const tag = source === 'ocr' ? '<span style="color:var(--log-ocr);margin-right:6px">[OCR]</span>' : '<span style="color:var(--log-bot);margin-right:6px">[BOT]</span>';
+    const cssClass = classifyLogLine(line);
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const html = `<div class="log-line ${cssClass}"><span style="opacity:0.4;margin-right:8px">${time}</span>${tag}${escapeHtml(line)}</div>`;
+    const el = document.getElementById('universalLog');
+    if (!el) return;
+    el.insertAdjacentHTML('beforeend', html);
+    trimLog(el, 200);
+    el.scrollTop = el.scrollHeight;
+}
+
 function appendBotLog(line) {
     const html = formatLogHtml(line);
-
-    // Full bot log panel
     const botLog = document.getElementById('botLogContainer');
     botLog.insertAdjacentHTML('beforeend', html);
     trimLog(botLog, 1000);
     if (shouldAutoScroll()) botLog.scrollTop = botLog.scrollHeight;
-
-    // Dashboard preview
-    const dashBot = document.getElementById('dashBotLog');
-    dashBot.insertAdjacentHTML('beforeend', html);
-    trimLog(dashBot, 50);
-    dashBot.scrollTop = dashBot.scrollHeight;
+    appendUniversalLog(line, 'bot');
 }
 
 function appendOcrLog(line) {
     const html = formatLogHtml(line);
-
-    // Full OCR log panel
     const ocrLog = document.getElementById('ocrLogContainer');
     ocrLog.insertAdjacentHTML('beforeend', html);
     trimLog(ocrLog, 1000);
     if (shouldAutoScroll()) ocrLog.scrollTop = ocrLog.scrollHeight;
-
-    // Dashboard preview
-    const dashOcr = document.getElementById('dashOcrLog');
-    dashOcr.insertAdjacentHTML('beforeend', html);
-    trimLog(dashOcr, 50);
-    dashOcr.scrollTop = dashOcr.scrollHeight;
+    appendUniversalLog(line, 'ocr');
 }
 
 function clearLogView() {
@@ -242,31 +276,15 @@ function clearLogView() {
 
 function clearBotLog() {
     document.getElementById('botLogContainer').innerHTML = '';
-    document.getElementById('dashBotLog').innerHTML = '';
 }
 
 function clearOcrLog() {
     document.getElementById('ocrLogContainer').innerHTML = '';
-    document.getElementById('dashOcrLog').innerHTML = '';
 }
 
-// --- OCR Controls ---
-async function startOcr() {
-    try {
-        await api('/api/ocr/start', { method: 'POST' });
-        showToast('Starting OCR server...', 'info');
-    } catch (e) {
-        showToast(e.message, 'error');
-    }
-}
-
-async function stopOcr() {
-    try {
-        await api('/api/ocr/stop', { method: 'POST' });
-        showToast('Stopping OCR server...', 'info');
-    } catch (e) {
-        showToast(e.message, 'error');
-    }
+function clearUniversalLog() {
+    const el = document.getElementById('universalLog');
+    if (el) el.innerHTML = '';
 }
 
 // --- Tasks ---
@@ -329,6 +347,15 @@ document.getElementById('btnDeselectAll').addEventListener('click', deselectAllT
 
 // --- Bot Control ---
 document.getElementById('btnStartBot').addEventListener('click', openTaskModal);
+document.getElementById('btnStartBlocked').addEventListener('click', () => {
+    // Scroll to status cards and flash the issues banner
+    const banner = document.getElementById('issuesBanner');
+    if (banner) {
+        banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        banner.classList.add('flash');
+        setTimeout(() => banner.classList.remove('flash'), 1200);
+    }
+});
 
 document.getElementById('btnStartWithTasks').addEventListener('click', async () => {
     const tasks = selectedTasks.size > 0 ? [...selectedTasks] : _tasks.map(t => t.key);
@@ -521,7 +548,11 @@ document.addEventListener('keydown', (e) => {
 async function refreshAccounts() {
     try {
         const accounts = await api('/api/accounts');
-        document.getElementById('statAccounts').textContent = accounts.length;
+        const totalChars = accounts.reduce((sum, a) => sum + (a.players?.length || 0), 0);
+        const accountsEl = document.getElementById('statAccounts');
+        const charsEl = document.getElementById('statCharacters');
+        if (accountsEl) accountsEl.textContent = accounts.length;
+        if (charsEl) charsEl.textContent = `${totalChars} characters`;
         renderAccounts(accounts);
     } catch (e) {
         console.error('Failed to load accounts:', e);

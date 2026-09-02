@@ -42,19 +42,23 @@
                     <div class="header-actions">
                         <button class="btn btn-secondary" id="btnDonate" onclick="window.open('https://ko-fi.com/wosbot','_blank')">☕ Donate</button>
                         <button class="btn btn-primary" id="btnStartBot">▶ Start Bot</button>
+                        <button class="btn btn-warn" id="btnStartBlocked" style="display:none;">⚠ Start Blocked</button>
                         <button class="btn btn-danger" id="btnStopBot" disabled>■ Stop</button>
                     </div>
                 </header>
 
-                <!-- ADB Warning Banner (hidden by default) -->
-                <div class="adb-warning" id="adbWarning" style="display:none;">
-                    <span class="adb-warning-icon">⚠️</span>
-                    <span class="adb-warning-text" id="adbWarningText">No ADB device connected</span>
+                <!-- Issues Banner (hidden by default) -->
+                <div class="issues-banner" id="issuesBanner" style="display:none;">
+                    <div class="issues-banner-header">
+                        <span class="issues-banner-icon">⚠️</span>
+                        <span class="issues-banner-title">Cannot Start Bot</span>
+                    </div>
+                    <ul class="issues-list" id="issuesList"></ul>
                 </div>
 
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-label">Bot Status</div>
+                        <div class="stat-label">Status</div>
                         <div class="stat-value" id="statStatus">
                             <span class="status-dot stopped"></span> Stopped
                         </div>
@@ -81,19 +85,14 @@
                     </div>
                 </div>
 
-                <!-- Dual Log Preview on Dashboard -->
-                <div class="dual-log-grid" style="margin-bottom: var(--sp-7);">
+                <!-- Universal Important Log -->
+                <div class="universal-log-wrapper" style="margin-bottom: var(--sp-7);">
                     <div class="log-panel">
                         <div class="log-panel-header">
-                            <span class="log-panel-title"><span class="status-dot" id="dashBotDot"></span> Bot Log</span>
+                            <span class="log-panel-title">📋 Activity Log</span>
+                            <button class="btn-xs" onclick="clearUniversalLog()">Clear</button>
                         </div>
-                        <div class="log-container" id="dashBotLog" style="max-height: 200px;"></div>
-                    </div>
-                    <div class="log-panel">
-                        <div class="log-panel-header">
-                            <span class="log-panel-title"><span class="status-dot" id="dashOcrDot"></span> OCR Log</span>
-                        </div>
-                        <div class="log-container" id="dashOcrLog" style="max-height: 200px;"></div>
+                        <div class="log-container" id="universalLog"></div>
                     </div>
                 </div>
 
