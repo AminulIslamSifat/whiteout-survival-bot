@@ -25,9 +25,12 @@ from cmd_program.screen_action import(
 
 
 def attack():
-    return
+    """Placeholder for sunfire castle attack logic."""
+    pass
+
 
 def heal():
+    """Sunfire castle heal loop — runs until interrupted."""
     while True:
         tap_screen(747, 2118, coord=True)
         time.sleep(1)
@@ -37,7 +40,7 @@ def heal():
         time.sleep(1)
         tap_screen(550, 1180, coord=True)
         time.sleep(1)
-        tap_on_text("attack",wait=3, sleep=1)
+        tap_on_text("attack", wait=3, sleep=1)
         tap_on_text("World.Deploy.Deploy", sleep=1)
         time.sleep(1)
         tap_screen(835, 2118, coord=True)
@@ -47,4 +50,6 @@ def heal():
         tap_screen(90, 850, coord=True)
 
 
-heal()
+TASK_METADATA = [
+    {"key": "sunfire_heal", "title": "Sunfire Heal", "description": "Auto-heal loop for Sunfire Castle", "func": "heal"},
+]

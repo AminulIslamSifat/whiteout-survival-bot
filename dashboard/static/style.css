@@ -468,6 +468,30 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 }
 .log-panel-title .status-dot { width: 6px; height: 6px; }
 
+.active-task-badge {
+  display: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 6px;
+  padding: 2px 10px;
+  margin-left: auto;
+  margin-right: var(--sp-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+  animation: taskBadgePulse 2s ease-in-out infinite;
+}
+.active-task-badge.visible { display: inline-block; }
+
+@keyframes taskBadgePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .log-container {
   flex: 1;
   min-height: 0;

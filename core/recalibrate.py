@@ -107,3 +107,5 @@ def recalibrate(timeout=30):
     if not is_home:
         raise RuntimeError("Homepage Not found, Runtime Error. Stopping the Bot...")
 
+
+recalibrate()

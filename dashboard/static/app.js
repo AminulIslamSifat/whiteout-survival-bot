@@ -140,20 +140,28 @@ function updateStatusUI(s) {
     const btnBlocked = document.getElementById('btnStartBlocked');
     const btnStop = document.getElementById('btnStopBot');
 
+    // Sync all global start/stop buttons across panels
+    const globalStartBtns = document.querySelectorAll('.global-start-btn');
+    const globalStopBtns = document.querySelectorAll('.global-stop-btn');
+
     if (isRunning) {
         if (btnStart) btnStart.style.display = 'none';
         if (btnBlocked) btnBlocked.style.display = 'none';
         if (btnStop) btnStop.disabled = false;
+        globalStartBtns.forEach(b => b.style.display = 'none');
+        globalStopBtns.forEach(b => { b.disabled = false; b.style.display = ''; });
     } else if (!ready) {
-        // Not ready — hide normal start, show blocked button
         if (btnStart) btnStart.style.display = 'none';
         if (btnBlocked) btnBlocked.style.display = '';
         if (btnStop) btnStop.disabled = true;
+        globalStartBtns.forEach(b => b.style.display = 'none');
+        globalStopBtns.forEach(b => { b.disabled = true; b.style.display = ''; });
     } else {
-        // Ready and not running — show normal start
         if (btnStart) { btnStart.style.display = ''; btnStart.disabled = false; }
         if (btnBlocked) btnBlocked.style.display = 'none';
         if (btnStop) btnStop.disabled = true;
+        globalStartBtns.forEach(b => { b.style.display = ''; b.disabled = false; });
+        globalStopBtns.forEach(b => { b.disabled = true; b.style.display = ''; });
     }
 
     // Update log panel status dots
@@ -168,6 +176,19 @@ function updateStatusUI(s) {
         const el = document.getElementById(id);
         if (el) el.className = `status-dot ${ocrDot}`;
     });
+
+    // Active task badge in Bot Output header
+    const taskBadge = document.getElementById('activeTaskBadge');
+    if (taskBadge) {
+        const task = s.current_task || '';
+        if (task && isRunning) {
+            taskBadge.textContent = task;
+            taskBadge.classList.add('visible');
+        } else {
+            taskBadge.textContent = '';
+            taskBadge.classList.remove('visible');
+        }
+    }
 }
 
 // --- Dual SSE Log Streams ---
@@ -368,12 +389,21 @@ document.getElementById('btnConfirmStart').addEventListener('click', async () =>
     await startBot(tasks);
 });
 
-document.getElementById('btnStopBot').addEventListener('click', async () => {
+async function _stopBot() {
     try {
         await api('/api/bot/stop', { method: 'POST' });
         showToast('Stopping bot...', 'info');
     } catch (e) {
         showToast(e.message, 'error');
+    }
+}
+
+document.getElementById('btnStopBot').addEventListener('click', _stopBot);
+
+// Global stop buttons across all panels
+document.addEventListener('click', (e) => {
+    if (e.target.closest('.global-stop-btn')) {
+        _stopBot();
     }
 });
 

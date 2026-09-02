@@ -859,6 +859,348 @@ async def update_settings(update: SettingsUpdate):
     return {"status": "updated", "settings": data}
 
 
+# --- Debug / Test Endpoints ---
+
+def _get_ocr_port() -> Optional[int]:
+    """Read current OCR server port from .ocr_port file."""
+    port_file = PROJECT_ROOT / "system" / ".ocr_port"
+    if not port_file.exists():
+        return None
+    try:
+        return int(port_file.read_text().strip())
+    except (ValueError, OSError):
+        return None
+
+
+class DebugOcrRequest(BaseModel):
+    image_base64: str  # base64-encoded PNG/JPEG
+    rois: Optional[list[list[float]]] = None  # percentage-based ROIs [x1,y1,x2,y2]
+    name: Optional[str] = None
+    expected_text: Optional[str] = None
+
+
+class DebugTemplateRequest(BaseModel):
+    image_base64: str  # screenshot to match against
+    template_base64: Optional[str] = None  # cropped template (if not using saved)
+    template_name: Optional[str] = None  # saved template name
+    threshold: float = 0.8
+    rois: Optional[list[list[float]]] = None
+
+
+class DebugSaveCoordRequest(BaseModel):
+    key: str  # e.g. "Home.NewButton"
+    text: Optional[str] = None
+    score: Optional[float] = None
+    box: list[float]  # [x1, y1, x2, y2] in percentage
+    target_file: Optional[str] = None  # specific file or None for merged
+
+
+@app.post("/api/debug/screenshot")
+async def debug_screenshot():
+    """Capture live screen from ADB and return as base64 PNG."""
+    import base64
+    import cv2
+    import numpy as np
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from cmd_program.screen_action import take_screenshot
+        img = take_screenshot(save=False)
+        _, buf = cv2.imencode(".png", img)
+        b64 = base64.b64encode(buf.tobytes()).decode()
+        return {"success": True, "image_base64": b64, "width": img.shape[1], "height": img.shape[0]}
+    except Exception as e:
+        raise HTTPException(500, f"Screenshot failed: {e}")
+
+
+@app.post("/api/debug/ocr")
+async def debug_ocr(req: DebugOcrRequest):
+    """Run OCR on an uploaded/captured image via the OCR server."""
+    import base64
+    import tempfile
+    ocr_port = _get_ocr_port()
+    if not ocr_port:
+        raise HTTPException(503, "OCR server not running")
+
+    # Decode base64 image to temp file
+    try:
+        img_data = base64.b64decode(req.image_base64)
+    except Exception as e:
+        raise HTTPException(400, f"Invalid base64 image: {e}")
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False, dir=str(PROJECT_ROOT / "cache"))
+    tmp.write(img_data)
+    tmp.close()
+
+    try:
+        # Convert percentage ROIs to pixel ROIs if provided
+        pixel_rois = None
+        if req.rois:
+            import cv2
+            import numpy as np
+            img_arr = np.frombuffer(img_data, np.uint8)
+            img = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
+            if img is not None:
+                h, w = img.shape[:2]
+                pixel_rois = []
+                for roi in req.rois:
+                    pixel_rois.append([
+                        int(roi[0] / 100 * w),
+                        int(roi[1] / 100 * h),
+                        int(roi[2] / 100 * w),
+                        int(roi[3] / 100 * h),
+                    ])
+
+        payload = {
+            "img_path": tmp.name,
+            "save_result": True,
+            "rois": pixel_rois,
+            "name": req.name,
+            "expected_text": req.expected_text,
+        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(f"http://127.0.0.1:{ocr_port}/ocr", json=payload)
+            data = resp.json()
+
+        return data
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+
+@app.post("/api/debug/template")
+async def debug_template(req: DebugTemplateRequest):
+    """Run template matching on an uploaded/captured image."""
+    import base64
+    import tempfile
+    import cv2
+    import numpy as np
+
+    ocr_port = _get_ocr_port()
+    if not ocr_port:
+        raise HTTPException(503, "OCR server not running")
+
+    # Decode screenshot
+    try:
+        screen_data = base64.b64decode(req.image_base64)
+    except Exception as e:
+        raise HTTPException(400, f"Invalid screenshot base64: {e}")
+
+    screen_tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False, dir=str(PROJECT_ROOT / "cache"))
+    screen_tmp.write(screen_data)
+    screen_tmp.close()
+
+    try:
+        if req.template_base64:
+            # User-cropped template: save it temporarily and use custom matching
+            tmpl_data = base64.b64decode(req.template_base64)
+            tmpl_tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False, dir=str(PROJECT_ROOT / "cache"))
+            tmpl_tmp.write(tmpl_data)
+            tmpl_tmp.close()
+
+            try:
+                # Run OpenCV template matching directly in dashboard server
+                screen_img = cv2.imdecode(np.frombuffer(screen_data, np.uint8), cv2.IMREAD_COLOR)
+                tmpl_img = cv2.imdecode(np.frombuffer(tmpl_data, np.uint8), cv2.IMREAD_COLOR)
+
+                if screen_img is None or tmpl_img is None:
+                    raise HTTPException(400, "Failed to decode images")
+
+                gray_screen = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
+                gray_tmpl = cv2.cvtColor(tmpl_img, cv2.COLOR_BGR2GRAY)
+
+                result = cv2.matchTemplate(gray_screen, gray_tmpl, cv2.TM_CCOEFF_NORMED)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+
+                h, w = tmpl_img.shape[:2]
+                sh, sw = screen_img.shape[:2]
+
+                matches = []
+                threshold = req.threshold
+                locations = np.where(result >= threshold)
+                for pt in zip(*locations[::-1]):
+                    matches.append({
+                        "box": [
+                            round(pt[0] / sw * 100, 2),
+                            round(pt[1] / sh * 100, 2),
+                            round((pt[0] + w) / sw * 100, 2),
+                            round((pt[1] + h) / sh * 100, 2),
+                        ],
+                        "score": round(float(result[pt[1], pt[0]]), 4),
+                        "pixel_box": [int(pt[0]), int(pt[1]), int(pt[0] + w), int(pt[1] + h)],
+                    })
+
+                # Deduplicate overlapping matches (NMS-like)
+                matches.sort(key=lambda m: m["score"], reverse=True)
+                filtered = []
+                for m in matches:
+                    overlap = False
+                    for f in filtered:
+                        if abs(m["box"][0] - f["box"][0]) < 2 and abs(m["box"][1] - f["box"][1]) < 2:
+                            overlap = True
+                            break
+                    if not overlap:
+                        filtered.append(m)
+
+                return {"success": True, "results": filtered, "best_score": round(max_val, 4)}
+            finally:
+                try:
+                    os.unlink(tmpl_tmp.name)
+                except OSError:
+                    pass
+
+        elif req.template_name:
+            # Use saved template via OCR server's /template endpoint
+            payload = {
+                "name": req.template_name,
+                "threshold": req.threshold,
+                "save_result": True,
+                "rois": None,
+            }
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(f"http://127.0.0.1:{ocr_port}/template", json=payload)
+                return resp.json()
+        else:
+            raise HTTPException(400, "Provide either template_base64 or template_name")
+    finally:
+        try:
+            os.unlink(screen_tmp.name)
+        except OSError:
+            pass
+
+
+@app.get("/api/debug/templates")
+async def debug_list_templates():
+    """List all saved template names from references/icon/."""
+    icon_dir = PROJECT_ROOT / "references" / "icon"
+    templates = []
+    if icon_dir.exists():
+        for f in sorted(icon_dir.glob("*.png")):
+            templates.append(f.stem)
+    # Also include entries from template_config.json
+    config_file = icon_dir / "template_config.json"
+    if config_file.exists():
+        try:
+            with open(config_file) as fh:
+                config = json.load(fh)
+            for key in config:
+                if key != "_demo" and key not in templates:
+                    templates.append(key)
+        except Exception:
+            pass
+    return {"templates": templates}
+
+
+@app.get("/api/debug/coords")
+async def debug_list_coords():
+    """List all text_area coord keys."""
+    text_area_dir = PROJECT_ROOT / "references" / "TextArea"
+    coords = {}
+    if text_area_dir.exists():
+        for f in sorted(text_area_dir.glob("*.json")):
+            if f.name.startswith("_"):
+                continue
+            try:
+                with open(f) as fh:
+                    data = json.load(fh)
+                if isinstance(data, dict):
+                    for key, val in data.items():
+                        coords[key] = {
+                            "box": val.get("box"),
+                            "text": val.get("text"),
+                            "source_file": f.name,
+                        }
+            except Exception:
+                pass
+    return {"count": len(coords), "coords": coords}
+
+
+@app.post("/api/debug/save-coord")
+async def debug_save_coord(req: DebugSaveCoordRequest):
+    """Save a new coord entry to the TextArea JSON files."""
+    text_area_dir = PROJECT_ROOT / "references" / "TextArea"
+    text_area_dir.mkdir(exist_ok=True)
+
+    # Determine target file
+    if req.target_file:
+        target = text_area_dir / req.target_file
+    else:
+        # Auto-determine from key prefix: Home.X -> Home.json, World.X -> World.json
+        parts = req.key.split(".")
+        prefix = parts[0] if parts else "Global"
+        target = text_area_dir / f"{prefix}.json"
+
+    # Load existing or create new
+    data = {}
+    if target.exists():
+        try:
+            with open(target) as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+
+    data[req.key] = {
+        "text": req.text or "",
+        "score": req.score or 0.0,
+        "box": req.box,
+    }
+
+    with open(target, "w") as f:
+        json.dump(data, f, indent=4)
+
+    return {"success": True, "saved_to": str(target.name), "key": req.key}
+
+
+@app.post("/api/debug/save-template")
+async def debug_save_template(req: DebugSaveCoordRequest):
+    """Save a cropped region as a template image."""
+    import base64
+    # This expects image_base64 in the request body alongside the coord info
+    # We reuse DebugSaveCoordRequest but the actual image comes from the frontend
+    # The frontend will POST the cropped image separately
+    raise HTTPException(501, "Use /api/debug/save-template-image instead")
+
+
+class SaveTemplateImageRequest(BaseModel):
+    name: str
+    image_base64: str
+    threshold: float = 0.8
+
+
+@app.post("/api/debug/save-template-image")
+async def debug_save_template_image(req: SaveTemplateImageRequest):
+    """Save a cropped template image to references/icon/."""
+    import base64
+    icon_dir = PROJECT_ROOT / "references" / "icon"
+    icon_dir.mkdir(exist_ok=True)
+
+    try:
+        img_data = base64.b64decode(req.image_base64)
+    except Exception as e:
+        raise HTTPException(400, f"Invalid base64: {e}")
+
+    filepath = icon_dir / f"{req.name}.png"
+    filepath.write_bytes(img_data)
+
+    # Update template_config.json
+    config_file = icon_dir / "template_config.json"
+    config = {}
+    if config_file.exists():
+        try:
+            with open(config_file) as f:
+                config = json.load(f)
+        except Exception:
+            config = {}
+
+    config[req.name] = {"threshold": req.threshold}
+
+    with open(config_file, "w") as f:
+        json.dump(config, f, indent=4)
+
+    return {"success": True, "saved_to": str(filepath), "name": req.name}
+
+
 # --- Static Files ---
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

@@ -122,6 +122,8 @@
                         <button class="btn btn-secondary" id="btnSelectAll">Select All</button>
                         <button class="btn btn-secondary" id="btnDeselectAll">Clear</button>
                         <button class="btn btn-primary" id="btnStartWithTasks">▶ Start Selected</button>
+                        <button class="btn btn-primary global-start-btn" onclick="openTaskModal()">▶ Start Bot</button>
+                        <button class="btn btn-danger global-stop-btn" disabled>■ Stop</button>
                     </div>
                 </header>
                 <div class="task-grid" id="taskGrid"></div>
@@ -134,6 +136,8 @@
                     <div class="header-actions">
                         <button class="btn btn-primary" onclick="openNewAccountModal()">+ Add Account</button>
                         <button class="btn btn-secondary" onclick="refreshAccounts()">↻ Refresh</button>
+                        <button class="btn btn-primary global-start-btn" onclick="openTaskModal()">▶ Start Bot</button>
+                        <button class="btn btn-danger global-stop-btn" disabled>■ Stop</button>
                     </div>
                 </header>
                 <div class="accounts-list" id="accountsList"></div>
@@ -148,12 +152,15 @@
                         <label class="toggle-label">
                             <input type="checkbox" id="autoScrollToggle" checked> Auto-scroll
                         </label>
+                        <button class="btn btn-primary global-start-btn" onclick="openTaskModal()">▶ Start Bot</button>
+                        <button class="btn btn-danger global-stop-btn" disabled>■ Stop</button>
                     </div>
                 </header>
                 <div class="dual-log-grid">
                     <div class="log-panel">
                         <div class="log-panel-header">
                             <span class="log-panel-title"><span class="status-dot" id="logBotDot"></span> Bot Output</span>
+                            <span class="active-task-badge" id="activeTaskBadge"></span>
                             <button class="btn-xs" onclick="clearBotLog()">Clear</button>
                         </div>
                         <div class="log-container" id="botLogContainer"></div>
@@ -174,6 +181,8 @@
                     <h1>Settings</h1>
                     <div class="header-actions">
                         <button class="btn btn-primary" id="btnSaveSettings">💾 Save</button>
+                        <button class="btn btn-primary global-start-btn" onclick="openTaskModal()">▶ Start Bot</button>
+                        <button class="btn btn-danger global-stop-btn" disabled>■ Stop</button>
                     </div>
                 </header>
                 <div class="settings-grid">
