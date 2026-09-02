@@ -24,6 +24,9 @@
                 <button class="rail-btn" data-view="logs" title="Logs">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                 </button>
+                <button class="rail-btn" data-view="debug" title="Test & Debug">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </button>
             </div>
             <div class="rail-sep"></div>
             <div class="rail-bottom">
@@ -203,6 +206,81 @@
                                 <p class="form-hint">Required for SCRCPY capture tool (v4l2loopback setup). Stored locally in settings.json.</p>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Debug / Test View -->
+            <section id="view-debug" class="view">
+                <header class="view-header">
+                    <h1>Test & Debug</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" id="dbgCaptureBtn">📷 Capture Screen</button>
+                        <label class="btn btn-secondary" style="cursor:pointer;">
+                            📁 Upload Image
+                            <input type="file" id="dbgFileInput" accept="image/*" hidden>
+                        </label>
+                    </div>
+                </header>
+
+                <!-- Tool Tabs -->
+                <div class="debug-tool-tabs">
+                    <button class="debug-tab active" data-tool="ocr">OCR Tester</button>
+                    <button class="debug-tab" data-tool="template">Template Matcher</button>
+                    <button class="debug-tab" data-tool="coords">Coord Saver</button>
+                </div>
+
+                <!-- Canvas Area (shared) -->
+                <div class="debug-canvas-wrapper">
+                    <canvas id="debugCanvas"></canvas>
+                    <div class="debug-canvas-placeholder" id="debugPlaceholder">
+                        <span class="empty-icon">🖼️</span>
+                        <span class="empty-text">Capture or upload an image to begin</span>
+                    </div>
+                    <!-- Crop overlay for template mode -->
+                    <div class="debug-crop-overlay" id="cropOverlay" style="display:none;"></div>
+                </div>
+
+                <!-- OCR Tool Panel -->
+                <div class="debug-panel active" id="panel-ocr">
+                    <div class="debug-controls">
+                        <button class="btn btn-primary" id="btnRunOcr">▶ Run OCR</button>
+                        <button class="btn btn-secondary" id="btnSaveOcrResult" disabled>💾 Save Result</button>
+                    </div>
+                    <div class="debug-results" id="ocrResults">
+                        <div class="empty-state"><span class="empty-text">No OCR results yet</span></div>
+                    </div>
+                </div>
+
+                <!-- Template Tool Panel -->
+                <div class="debug-panel" id="panel-template">
+                    <div class="debug-controls">
+                        <div class="debug-control-group">
+                            <label class="debug-radio-label">
+                                <input type="radio" name="tmplMode" value="crop" checked> Crop from image
+                            </label>
+                            <label class="debug-radio-label">
+                                <input type="radio" name="tmplMode" value="saved"> Use saved template
+                            </label>
+                        </div>
+                        <select id="tmplSelect" class="form-input" style="display:none;"></select>
+                        <input type="number" id="tmplThreshold" class="form-input" style="width:80px;" value="0.8" min="0.1" max="1.0" step="0.05" title="Match threshold">
+                        <button class="btn btn-primary" id="btnRunTemplate">▶ Match</button>
+                        <button class="btn btn-secondary" id="btnSaveTemplate" disabled>💾 Save Template</button>
+                    </div>
+                    <div class="debug-results" id="templateResults">
+                        <div class="empty-state"><span class="empty-text">No match results yet</span></div>
+                    </div>
+                </div>
+
+                <!-- Coord Saver Panel -->
+                <div class="debug-panel" id="panel-coords">
+                    <div class="debug-controls">
+                        <input type="text" id="coordKey" class="form-input" placeholder="Key (e.g. Home.NewButton)" style="flex:1;">
+                        <button class="btn btn-primary" id="btnSaveCoord" disabled>💾 Save Coord</button>
+                    </div>
+                    <div class="debug-results" id="coordResults">
+                        <div class="empty-state"><span class="empty-text">Click on the image to pick coordinates</span></div>
                     </div>
                 </div>
             </section>

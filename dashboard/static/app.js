@@ -804,3 +804,436 @@ async function init() {
 }
 
 init();
+
+// ═══════════════════════════════════════════
+// Debug / Test Tab
+// ═══════════════════════════════════════════
+
+const Debug = (() => {
+    const canvas = document.getElementById('debugCanvas');
+    const ctx = canvas.getContext('2d');
+    const placeholder = document.getElementById('debugPlaceholder');
+    const cropOverlay = document.getElementById('cropOverlay');
+
+    let currentImage = null;       // HTMLImageElement
+    let currentBase64 = null;      // base64 string (no prefix)
+    let ocrResultData = null;      // last OCR response
+    let templateCropRect = null;   // {x,y,w,h} in image coords
+    let selectedCoordBox = null;   // [x1%,y1%,x2%,y2%]
+    let activeTool = 'ocr';
+
+    // --- Tool Tab Switching ---
+    document.querySelectorAll('.debug-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.debug-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.debug-panel').forEach(p => p.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById(`panel-${tab.dataset.tool}`).classList.add('active');
+            activeTool = tab.dataset.tool;
+            cropOverlay.style.display = (activeTool === 'template') ? 'block' : 'none';
+            templateCropRect = null;
+        });
+    });
+
+    // --- Image Loading ---
+    function loadImage(base64) {
+        currentBase64 = base64;
+        const img = new Image();
+        img.onload = () => {
+            currentImage = img;
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            placeholder.classList.add('hidden');
+            enableButtons(true);
+            clearResults();
+        };
+        img.src = `data:image/png;base64,${base64}`;
+    }
+
+    function enableButtons(hasImage) {
+        document.getElementById('btnRunOcr').disabled = !hasImage;
+        document.getElementById('btnRunTemplate').disabled = !hasImage;
+    }
+
+    function clearResults() {
+        ocrResultData = null;
+        templateCropRect = null;
+        selectedCoordBox = null;
+        document.getElementById('btnSaveOcrResult').disabled = true;
+        document.getElementById('btnSaveTemplate').disabled = true;
+        document.getElementById('btnSaveCoord').disabled = true;
+        document.getElementById('ocrResults').innerHTML = '<div class="empty-state"><span class="empty-text">No OCR results yet</span></div>';
+        document.getElementById('templateResults').innerHTML = '<div class="empty-state"><span class="empty-text">No match results yet</span></div>';
+        document.getElementById('coordResults').innerHTML = '<div class="empty-state"><span class="empty-text">Click on the image to pick coordinates</span></div>';
+        redrawCanvas();
+    }
+
+    function redrawCanvas() {
+        if (!currentImage) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(currentImage, 0, 0);
+    }
+
+    // --- Capture Screen ---
+    document.getElementById('dbgCaptureBtn').addEventListener('click', async () => {
+        try {
+            showToast('Capturing screen...', 'info');
+            const data = await api('/api/debug/screenshot', { method: 'POST' });
+            if (data.success) {
+                loadImage(data.image_base64);
+                showToast('Screen captured', 'success');
+            }
+        } catch (e) {
+            showToast(`Capture failed: ${e.message}`, 'error');
+        }
+    });
+
+    // --- Upload Image ---
+    document.getElementById('dbgFileInput').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            const b64 = reader.result.split(',')[1];
+            loadImage(b64);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    });
+
+    // --- Canvas Click (Coord Saver + Crop) ---
+    let isDragging = false;
+    let dragStart = null;
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (!currentImage) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+
+        if (activeTool === 'coords') {
+            // Single click: select point, create a small box around it
+            const pctX = (x / canvas.width * 100).toFixed(2);
+            const pctY = (y / canvas.height * 100).toFixed(2);
+            const boxSize = 2; // percent
+            selectedCoordBox = [
+                parseFloat((parseFloat(pctX) - boxSize).toFixed(2)),
+                parseFloat((parseFloat(pctY) - boxSize).toFixed(2)),
+                parseFloat((parseFloat(pctX) + boxSize).toFixed(2)),
+                parseFloat((parseFloat(pctY) + boxSize).toFixed(2)),
+            ];
+            document.getElementById('btnSaveCoord').disabled = false;
+            document.getElementById('coordResults').innerHTML = `
+                <div class="debug-coord-preview">
+                    Click: (${pctX}%, ${pctY}%)<br>
+                    Box: [${selectedCoordBox.join(', ')}]
+                </div>`;
+            redrawCanvas();
+            drawCoordMarker(x, y);
+        } else if (activeTool === 'template') {
+            isDragging = true;
+            dragStart = { x, y, clientX: e.clientX, clientY: e.clientY };
+        }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (!isDragging || activeTool !== 'template' || !dragStart) return;
+        const rect = canvas.getBoundingClientRect();
+        const overlayRect = cropOverlay.parentElement.getBoundingClientRect();
+        const startX = dragStart.clientX - overlayRect.left;
+        const startY = dragStart.clientY - overlayRect.top;
+        const curX = e.clientX - overlayRect.left;
+        const curY = e.clientY - overlayRect.top;
+
+        cropOverlay.style.display = 'block';
+        cropOverlay.style.left = Math.min(startX, curX) + 'px';
+        cropOverlay.style.top = Math.min(startY, curY) + 'px';
+        cropOverlay.style.width = Math.abs(curX - startX) + 'px';
+        cropOverlay.style.height = Math.abs(curY - startY) + 'px';
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+        if (!isDragging || activeTool !== 'template') return;
+        isDragging = false;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const endX = (e.clientX - rect.left) * scaleX;
+        const endY = (e.clientY - rect.top) * scaleY;
+
+        const x = Math.min(dragStart.x, endX);
+        const y = Math.min(dragStart.y, endY);
+        const w = Math.abs(endX - dragStart.x);
+        const h = Math.abs(endY - dragStart.y);
+
+        if (w > 5 && h > 5) {
+            templateCropRect = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+            document.getElementById('btnSaveTemplate').disabled = false;
+            showToast(`Crop selected: ${Math.round(w)}×${Math.round(h)}`, 'info');
+        }
+        dragStart = null;
+    });
+
+    function drawCoordMarker(px, py) {
+        ctx.strokeStyle = '#f87171';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, 8, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px - 12, py); ctx.lineTo(px + 12, py);
+        ctx.moveTo(px, py - 12); ctx.lineTo(px, py + 12);
+        ctx.stroke();
+    }
+
+    function drawOcrBoxes(results) {
+        if (!currentImage || !results) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.lineWidth = 2;
+        for (const r of results) {
+            const box = r.box || r.pixel_box;
+            if (!box) continue;
+            // If values are percentage-based (< 1.1 range or explicitly percentage)
+            let x1, y1, x2, y2;
+            if (r.pixel_box) {
+                [x1, y1, x2, y2] = r.pixel_box;
+            } else {
+                // Assume percentage
+                x1 = box[0] / 100 * w; y1 = box[1] / 100 * h;
+                x2 = box[2] / 100 * w; y2 = box[3] / 100 * h;
+            }
+            ctx.strokeStyle = '#34d399';
+            ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+            ctx.fillStyle = 'rgba(52, 211, 153, 0.15)';
+            ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+            if (r.text) {
+                ctx.fillStyle = '#34d399';
+                ctx.font = '12px sans-serif';
+                ctx.fillText(r.text.substring(0, 30), x1, y1 - 4);
+            }
+        }
+    }
+
+    function drawTemplateMatches(matches) {
+        if (!currentImage || !matches) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.lineWidth = 2;
+        for (const m of matches) {
+            let x1, y1, x2, y2;
+            if (m.pixel_box) {
+                [x1, y1, x2, y2] = m.pixel_box;
+            } else {
+                x1 = m.box[0] / 100 * w; y1 = m.box[1] / 100 * h;
+                x2 = m.box[2] / 100 * w; y2 = m.box[3] / 100 * h;
+            }
+            ctx.strokeStyle = '#fbbf24';
+            ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+            ctx.fillStyle = 'rgba(251, 191, 36, 0.15)';
+            ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = '12px sans-serif';
+            ctx.fillText(`${(m.score * 100).toFixed(1)}%`, x1, y1 - 4);
+        }
+    }
+
+    // --- Run OCR ---
+    document.getElementById('btnRunOcr').addEventListener('click', async () => {
+        if (!currentBase64) return;
+        try {
+            showToast('Running OCR...', 'info');
+            const data = await api('/api/debug/ocr', {
+                method: 'POST',
+                body: JSON.stringify({ image_base64: currentBase64 }),
+            });
+            ocrResultData = data;
+            document.getElementById('btnSaveOcrResult').disabled = false;
+
+            // Draw bounding boxes
+            redrawCanvas();
+            const results = data.results || data.ocr_results || [];
+            drawOcrBoxes(results);
+
+            // Render results list
+            const container = document.getElementById('ocrResults');
+            if (results.length === 0) {
+                container.innerHTML = '<div class="empty-state"><span class="empty-text">No text detected</span></div>';
+            } else {
+                container.innerHTML = results.map((r, i) => `
+                    <div class="debug-result-item">
+                        <span class="debug-result-text">${escapeHtml(r.text || '')}</span>
+                        <span class="debug-result-score">${r.score != null ? (r.score * 100).toFixed(1) + '%' : ''}</span>
+                        <span class="debug-result-box">[${(r.box || r.pixel_box || []).map(v => typeof v === 'number' ? v.toFixed?.(1) ?? v : v).join(', ')}]</span>
+                    </div>
+                `).join('');
+            }
+            showToast(`OCR complete: ${results.length} results`, 'success');
+        } catch (e) {
+            showToast(`OCR failed: ${e.message}`, 'error');
+        }
+    });
+
+    // --- Save OCR Result as Coord ---
+    document.getElementById('btnSaveOcrResult').addEventListener('click', async () => {
+        if (!ocrResultData) return;
+        const results = ocrResultData.results || ocrResultData.ocr_results || [];
+        if (results.length === 0) return;
+
+        // Save first result (or could prompt user to pick one)
+        const r = results[0];
+        const key = prompt('Enter coord key (e.g. Home.SomeButton):', '');
+        if (!key) return;
+
+        try {
+            const box = r.box || r.pixel_box || [0,0,0,0];
+            await api('/api/debug/save-coord', {
+                method: 'POST',
+                body: JSON.stringify({
+                    key,
+                    text: r.text || '',
+                    score: r.score || 0,
+                    box,
+                }),
+            });
+            showToast(`Saved coord: ${key}`, 'success');
+        } catch (e) {
+            showToast(`Save failed: ${e.message}`, 'error');
+        }
+    });
+
+    // --- Template Mode Toggle ---
+    document.querySelectorAll('input[name="tmplMode"]').forEach(radio => {
+        radio.addEventListener('change', async () => {
+            const mode = document.querySelector('input[name="tmplMode"]:checked').value;
+            const sel = document.getElementById('tmplSelect');
+            if (mode === 'saved') {
+                sel.style.display = 'inline-block';
+                // Load template list
+                try {
+                    const data = await api('/api/debug/templates');
+                    sel.innerHTML = data.templates.map(t => `<option value="${t}">${t}</option>`).join('');
+                } catch (e) {
+                    sel.innerHTML = '<option>Error loading templates</option>';
+                }
+            } else {
+                sel.style.display = 'none';
+            }
+        });
+    });
+
+    // --- Run Template Match ---
+    document.getElementById('btnRunTemplate').addEventListener('click', async () => {
+        if (!currentBase64) return;
+        const mode = document.querySelector('input[name="tmplMode"]:checked').value;
+        const threshold = parseFloat(document.getElementById('tmplThreshold').value) || 0.8;
+
+        try {
+            showToast('Running template match...', 'info');
+            let payload = { image_base64: currentBase64, threshold };
+
+            if (mode === 'crop' && templateCropRect) {
+                // Extract cropped template from current image using offscreen canvas
+                const offCanvas = document.createElement('canvas');
+                offCanvas.width = templateCropRect.w;
+                offCanvas.height = templateCropRect.h;
+                const offCtx = offCanvas.getContext('2d');
+                offCtx.drawImage(currentImage,
+                    templateCropRect.x, templateCropRect.y, templateCropRect.w, templateCropRect.h,
+                    0, 0, templateCropRect.w, templateCropRect.h
+                );
+                const tmplB64 = offCanvas.toDataURL('image/png').split(',')[1];
+                payload.template_base64 = tmplB64;
+            } else if (mode === 'saved') {
+                const name = document.getElementById('tmplSelect').value;
+                if (!name) { showToast('Select a template first', 'error'); return; }
+                payload.template_name = name;
+            } else {
+                showToast('Draw a crop region first or switch to saved template mode', 'error');
+                return;
+            }
+
+            const data = await api('/api/debug/template', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+            });
+
+            // Draw matches
+            redrawCanvas();
+            const matches = data.results || [];
+            drawTemplateMatches(matches);
+
+            // Render results
+            const container = document.getElementById('templateResults');
+            if (matches.length === 0) {
+                container.innerHTML = `<div class="empty-state"><span class="empty-text">No matches found (best: ${(data.best_score * 100).toFixed(1)}%)</span></div>`;
+            } else {
+                container.innerHTML = matches.map(m => `
+                    <div class="debug-result-item">
+                        <span class="debug-result-text">Match @ [${m.box.join(', ')}]</span>
+                        <span class="debug-result-score">${(m.score * 100).toFixed(1)}%</span>
+                    </div>
+                `).join('');
+            }
+            showToast(`Template match: ${matches.length} found`, 'success');
+        } catch (e) {
+            showToast(`Template match failed: ${e.message}`, 'error');
+        }
+    });
+
+    // --- Save Cropped Template ---
+    document.getElementById('btnSaveTemplate').addEventListener('click', async () => {
+        if (!templateCropRect || !currentImage) return;
+        const name = prompt('Template name (no extension):', '');
+        if (!name) return;
+        const threshold = parseFloat(document.getElementById('tmplThreshold').value) || 0.8;
+
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = templateCropRect.w;
+        offCanvas.height = templateCropRect.h;
+        const offCtx = offCanvas.getContext('2d');
+        offCtx.drawImage(currentImage,
+            templateCropRect.x, templateCropRect.y, templateCropRect.w, templateCropRect.h,
+            0, 0, templateCropRect.w, templateCropRect.h
+        );
+        const b64 = offCanvas.toDataURL('image/png').split(',')[1];
+
+        try {
+            await api('/api/debug/save-template-image', {
+                method: 'POST',
+                body: JSON.stringify({ name, image_base64: b64, threshold }),
+            });
+            showToast(`Template saved: ${name}`, 'success');
+        } catch (e) {
+            showToast(`Save failed: ${e.message}`, 'error');
+        }
+    });
+
+    // --- Save Coord (from click) ---
+    document.getElementById('btnSaveCoord').addEventListener('click', async () => {
+        if (!selectedCoordBox) return;
+        const key = document.getElementById('coordKey').value.trim();
+        if (!key) { showToast('Enter a key name first', 'error'); return; }
+
+        try {
+            await api('/api/debug/save-coord', {
+                method: 'POST',
+                body: JSON.stringify({ key, box: selectedCoordBox }),
+            });
+            showToast(`Coord saved: ${key}`, 'success');
+            document.getElementById('coordKey').value = '';
+            document.getElementById('btnSaveCoord').disabled = true;
+        } catch (e) {
+            showToast(`Save failed: ${e.message}`, 'error');
+        }
+    });
+
+    function escapeHtml(str) {
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    return {};
+})();
