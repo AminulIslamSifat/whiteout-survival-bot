@@ -1,8 +1,12 @@
 // WOS-Bot Dashboard Frontend
 const API = '';
 let selectedTasks = new Set();
+let selectedAccountEmails = new Set();  // accounts selected for bot run
+let selectedCharacters = {};  // email -> Set of player_ids selected for bot run
 let eventSource = null;
+let ocrEventSource = null;
 let statusInterval = null;
+let _accountsCache = [];  // cached for modal selector
 
 // --- Toast Notifications ---
 function showToast(message, type = 'info') {
@@ -80,6 +84,16 @@ function updateStatusUI(s) {
     document.getElementById('statStatus').innerHTML = `<span class="status-dot ${dotClass}"></span> ${label}`;
     document.getElementById('statPlayer').textContent = s.current_player || '—';
     document.getElementById('statTask').textContent = s.current_task || '—';
+
+    // OCR status
+    const ocrStatus = s.ocr_status || 'stopped';
+    const ocrLabel = ocrStatus.charAt(0).toUpperCase() + ocrStatus.slice(1);
+    const ocrEl = document.getElementById('statOcr');
+    if (ocrEl) {
+        ocrEl.innerHTML = `<span class="status-dot ${ocrStatus}"></span> ${ocrLabel}
+            <button class="btn-xs btn-primary" id="btnStartOcr" style="margin-left:8px" onclick="startOcr()" ${ocrStatus !== 'stopped' ? 'disabled' : ''}>Start</button>
+            <button class="btn-xs btn-danger" id="btnStopOcr" style="margin-left:4px" onclick="stopOcr()" ${ocrStatus !== 'running' ? 'disabled' : ''}>Stop</button>`;
+    }
 
     // Button states
     const isRunning = s.status === 'running' || s.status === 'starting';
@@ -242,21 +256,159 @@ document.getElementById('btnStopBot').addEventListener('click', async () => {
 
 async function startBot(tasks) {
     try {
+        const payload = { tasks };
+        const allEmails = _accountsCache.map(a => a.email);
+        const isAllAccounts = allEmails.length > 0 && allEmails.every(e => selectedAccountEmails.has(e));
+
+        // Check if all characters are selected across all accounts
+        let isAllChars = true;
+        for (const a of _accountsCache) {
+            const charSet = selectedCharacters[a.email];
+            if (!charSet || charSet.size !== a.players.length) {
+                isAllChars = false;
+                break;
+            }
+        }
+
+        // Send account filter if not all accounts selected
+        if (!isAllAccounts && selectedAccountEmails.size > 0) {
+            payload.accounts = [...selectedAccountEmails];
+        }
+
+        // Build characters dict only if some characters are deselected
+        if (!isAllChars && selectedAccountEmails.size > 0) {
+            const charsDict = {};
+            for (const email of selectedAccountEmails) {
+                const charSet = selectedCharacters[email];
+                if (charSet && charSet.size > 0) {
+                    charsDict[email] = [...charSet];
+                }
+            }
+            if (Object.keys(charsDict).length > 0) {
+                payload.characters = charsDict;
+            }
+        }
+
         await api('/api/bot/start', {
             method: 'POST',
-            body: JSON.stringify({ tasks }),
+            body: JSON.stringify(payload),
         });
-        showToast(`Bot started with ${tasks.length} tasks`, 'success');
-        // Switch to dashboard to see live status
+        const accMsg = payload.accounts ? ` (${payload.accounts.length} accounts)` : ' (all accounts)';
+        const charMsg = payload.characters ? ' + character filter' : '';
+        showToast(`Bot started with ${tasks.length} tasks${accMsg}${charMsg}`, 'success');
         document.querySelector('[data-view="dashboard"]').click();
     } catch (e) {
         showToast(e.message, 'error');
     }
 }
 
+// --- Account/Character Selector (Modal) ---
+function renderAccountSelector() {
+    const container = document.getElementById('accountSelector');
+    if (!_accountsCache.length) {
+        container.innerHTML = '<div class="empty-state" style="padding:12px"><div class="empty-text">No accounts configured</div></div>';
+        return;
+    }
+
+    container.innerHTML = _accountsCache.map(a => {
+        const emailChecked = selectedAccountEmails.has(a.email);
+        const charSet = selectedCharacters[a.email] || new Set();
+
+        const playerHtml = a.players.map(p => {
+            const pChecked = charSet.has(String(p.id));
+            return `
+                <label class="char-checkbox ${pChecked ? 'checked' : ''}" data-email="${escapeHtml(a.email)}" data-id="${p.id}">
+                    <input type="checkbox" ${pChecked ? 'checked' : ''} onchange="toggleCharacter('${escapeHtml(a.email)}', '${p.id}', this.checked)">
+                    <span class="player-name">${escapeHtml(p.name)}</span>
+                    <span class="player-id">#${p.id}</span>
+                </label>
+            `;
+        }).join('');
+
+        return `
+            <div class="account-select-item ${emailChecked ? 'selected' : ''}">
+                <label class="account-checkbox">
+                    <input type="checkbox" ${emailChecked ? 'checked' : ''} onchange="toggleAccount('${escapeHtml(a.email)}', this.checked)">
+                    <span class="account-email">${escapeHtml(a.email)}</span>
+                    <span class="account-priority">#${a.priority}</span>
+                </label>
+                <div class="char-list">${playerHtml}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleAccount(email, checked) {
+    if (checked) {
+        selectedAccountEmails.add(email);
+        // Select all characters for this account
+        const acc = _accountsCache.find(a => a.email === email);
+        if (acc) {
+            selectedCharacters[email] = new Set(acc.players.map(p => String(p.id)));
+        }
+    } else {
+        selectedAccountEmails.delete(email);
+        delete selectedCharacters[email];
+    }
+    renderAccountSelector();
+    updateSelectAllAccountsCheckbox();
+}
+
+function toggleCharacter(email, playerId, checked) {
+    if (!selectedCharacters[email]) selectedCharacters[email] = new Set();
+    if (checked) {
+        selectedCharacters[email].add(String(playerId));
+        selectedAccountEmails.add(email);
+    } else {
+        selectedCharacters[email].delete(String(playerId));
+        // If no chars left for this account, deselect the account too
+        if (selectedCharacters[email].size === 0) {
+            selectedAccountEmails.delete(email);
+            delete selectedCharacters[email];
+        }
+    }
+    renderAccountSelector();
+    updateSelectAllAccountsCheckbox();
+}
+
+function toggleAllAccounts() {
+    const allChecked = document.getElementById('selectAllAccounts').checked;
+    selectedAccountEmails.clear();
+    selectedCharacters = {};
+
+    if (allChecked) {
+        _accountsCache.forEach(a => {
+            selectedAccountEmails.add(a.email);
+            selectedCharacters[a.email] = new Set(a.players.map(p => String(p.id)));
+        });
+    }
+    renderAccountSelector();
+}
+
+function updateSelectAllAccountsCheckbox() {
+    const allEmails = _accountsCache.map(a => a.email);
+    const allSelected = allEmails.length > 0 && allEmails.every(e => selectedAccountEmails.has(e));
+    document.getElementById('selectAllAccounts').checked = allSelected;
+}
+
 // --- Modal ---
-function openTaskModal() {
+async function openTaskModal() {
     renderTaskGrid();
+    // Refresh accounts cache and initialize selector state
+    try {
+        _accountsCache = await api('/api/accounts');
+    } catch (e) {
+        _accountsCache = [];
+    }
+    // Default: select all accounts + all characters
+    selectedAccountEmails.clear();
+    selectedCharacters = {};
+    _accountsCache.forEach(a => {
+        selectedAccountEmails.add(a.email);
+        selectedCharacters[a.email] = new Set(a.players.map(p => String(p.id)));
+    });
+    renderAccountSelector();
+    updateSelectAllAccountsCheckbox();
     document.getElementById('taskModal').classList.add('open');
 }
 
@@ -286,6 +438,8 @@ async function refreshAccounts() {
     }
 }
 
+let _editingAccountEmail = null;  // tracks which account is being edited
+
 function renderAccounts(accounts) {
     const list = document.getElementById('accountsList');
     if (!accounts.length) {
@@ -297,6 +451,7 @@ function renderAccounts(accounts) {
             <div class="account-header">
                 <span class="account-email">${escapeHtml(a.email)}</span>
                 <span class="account-priority">#${a.priority}</span>
+                <button class="btn-xs btn-secondary" onclick="openAccountEditModal('${escapeHtml(a.email)}')">✏️ Edit</button>
             </div>
             <div class="player-list">
                 ${a.players.map(p => `
@@ -309,6 +464,117 @@ function renderAccounts(accounts) {
         </div>
     `).join('');
 }
+
+// --- Account Edit Modal ---
+function openNewAccountModal() {
+    _editingAccountEmail = null;
+    document.getElementById('accountEditTitle').textContent = 'Add New Account';
+    document.getElementById('editEmail').value = '';
+    document.getElementById('editEmail').disabled = false;
+    document.getElementById('editPriority').value = '999';
+    document.getElementById('editPlayerList').innerHTML = '';
+    document.getElementById('btnDeleteAccount').style.display = 'none';
+    document.getElementById('accountEditModal').classList.add('open');
+}
+
+async function openAccountEditModal(email) {
+    try {
+        const accounts = await api('/api/accounts');
+        const acc = accounts.find(a => a.email === email);
+        if (!acc) { showToast('Account not found', 'error'); return; }
+
+        _editingAccountEmail = email;
+        document.getElementById('accountEditTitle').textContent = 'Edit Account';
+        document.getElementById('editEmail').value = email;
+        document.getElementById('editEmail').disabled = true;  // can't rename email
+        document.getElementById('editPriority').value = acc.priority;
+        document.getElementById('btnDeleteAccount').style.display = '';
+
+        const playerListEl = document.getElementById('editPlayerList');
+        playerListEl.innerHTML = acc.players.map((p, i) => `
+            <div class="player-edit-row" data-index="${i}">
+                <input type="text" class="form-input player-edit-name" value="${escapeHtml(p.name)}" placeholder="Character name">
+                <input type="text" class="form-input player-edit-id" value="${escapeHtml(String(p.id))}" placeholder="Player ID">
+                <button class="btn-xs btn-danger" onclick="this.parentElement.remove()">✕</button>
+            </div>
+        `).join('');
+
+        document.getElementById('accountEditModal').classList.add('open');
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+function closeAccountEditModal() {
+    document.getElementById('accountEditModal').classList.remove('open');
+    _editingAccountEmail = null;
+}
+
+function addPlayerField() {
+    const list = document.getElementById('editPlayerList');
+    const row = document.createElement('div');
+    row.className = 'player-edit-row';
+    row.innerHTML = `
+        <input type="text" class="form-input player-edit-name" placeholder="Character name">
+        <input type="text" class="form-input player-edit-id" placeholder="Player ID">
+        <button class="btn-xs btn-danger" onclick="this.parentElement.remove()">✕</button>
+    `;
+    list.appendChild(row);
+}
+
+async function saveAccountEdit() {
+    const email = document.getElementById('editEmail').value.trim();
+    const priority = parseInt(document.getElementById('editPriority').value) || 999;
+    const rows = document.querySelectorAll('.player-edit-row');
+    const players = [];
+    rows.forEach(row => {
+        const name = row.querySelector('.player-edit-name').value.trim();
+        const id = row.querySelector('.player-edit-id').value.trim();
+        if (name && id) players.push({ name, id });
+    });
+
+    if (!email) { showToast('Email is required', 'error'); return; }
+
+    try {
+        if (_editingAccountEmail) {
+            // Update existing account
+            await api(`/api/accounts/${encodeURIComponent(_editingAccountEmail)}`, {
+                method: 'PUT',
+                body: JSON.stringify({ email, priority, players }),
+            });
+            showToast('Account updated', 'success');
+        } else {
+            // Create new account
+            await api('/api/accounts', {
+                method: 'POST',
+                body: JSON.stringify({ email, priority, players }),
+            });
+            showToast('Account created', 'success');
+        }
+        closeAccountEditModal();
+        await refreshAccounts();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+async function deleteEditingAccount() {
+    if (!_editingAccountEmail) return;
+    if (!confirm(`Delete account ${_editingAccountEmail}? This cannot be undone.`)) return;
+    try {
+        await api(`/api/accounts/${encodeURIComponent(_editingAccountEmail)}`, { method: 'DELETE' });
+        showToast('Account deleted', 'success');
+        closeAccountEditModal();
+        await refreshAccounts();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+// Close account edit modal on overlay click
+document.getElementById('accountEditModal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeAccountEditModal();
+});
 
 // --- Completion ---
 async function refreshCompletion() {

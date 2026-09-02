@@ -123,14 +123,52 @@ def mark_player_completed(player_id, records):
 
 
 # --- Account Loading ---
-def init_database():
+def init_database(
+    account_filter: list[str] | None = None,
+    character_filter: dict[str, list[str]] | None = None,
+):
+    """Load accounts, optionally filtering to specific emails and/or characters.
+
+    Args:
+        account_filter: List of emails to include. None = all accounts.
+        character_filter: Dict of email -> [player_ids] to include. None = all characters.
+    """
     global player_data, email_list, player_list
     path = "db/account.json"
     with open(path) as f:
-        player_data = json.load(f)
+        raw_data = json.load(f)
+
+    # Apply account filter if provided
+    if account_filter:
+        filtered = {k: v for k, v in raw_data.items() if k in account_filter}
+        if not filtered:
+            print(f"⚠️ No matching accounts found for filter: {account_filter}")
+            print(f"   Available: {', '.join(raw_data.keys())}")
+        raw_data = filtered
+
+    # Apply character filter if provided
+    if character_filter:
+        for email, allowed_ids in character_filter.items():
+            if email not in raw_data:
+                continue
+            allowed_lower = {pid.lower() for pid in allowed_ids}
+            original_players = raw_data[email].get("player", [])
+            filtered_players = [
+                p for p in original_players
+                if str(p.get("id", "")).lower() in allowed_lower
+            ]
+            raw_data[email]["player"] = filtered_players
+            removed = len(original_players) - len(filtered_players)
+            if removed > 0:
+                print(f"🎮 Filtered {removed} character(s) from {email}")
+        # Remove accounts with no remaining players
+        empty_emails = [e for e, d in raw_data.items() if not d.get("player")]
+        for e in empty_emails:
+            print(f"⚠️ Removing {e} — no characters left after filter")
+            del raw_data[e]
 
     sorted_player_data = sorted(
-        player_data.items(),
+        raw_data.items(),
         key=lambda item: item[1].get("priority", float("inf"))
     )
 
@@ -358,8 +396,10 @@ def main():
     parser.add_argument("--tasks", type=str, help="Comma-separated task keys")
     args = parser.parse_args()
 
-    # Determine task keys: CLI arg > stdin JSON > fail
+    # Determine task keys + optional filters: CLI arg > stdin JSON > fail
     task_keys = None
+    account_filter = None
+    character_filter = None
 
     if args.tasks:
         task_keys = [k.strip() for k in args.tasks.split(",") if k.strip()]
@@ -371,6 +411,8 @@ def main():
                 data = json.loads(raw)
                 if isinstance(data, dict) and "tasks" in data:
                     task_keys = data["tasks"]
+                    account_filter = data.get("accounts")  # optional email filter
+                    character_filter = data.get("characters")  # optional char filter
                 elif isinstance(data, list):
                     task_keys = data
         except (json.JSONDecodeError, Exception) as e:
@@ -391,9 +433,14 @@ def main():
         sys.exit(1)
 
     print(f"✅ Starting bot with tasks: {', '.join(task_keys)}")
+    if account_filter:
+        print(f"👤 Account filter: {', '.join(account_filter)}")
+    if character_filter:
+        for email, ids in character_filter.items():
+            print(f"🎮 Character filter for {email}: {', '.join(ids)}")
     print(f"📋 Discovered {len(TASK_MAP)} tasks from usecases/")
 
-    init_database()
+    init_database(account_filter=account_filter, character_filter=character_filter)
     run_bot(task_keys)
 
 

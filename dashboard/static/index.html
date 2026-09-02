@@ -60,6 +60,14 @@
                         </div>
                     </div>
                     <div class="stat-card">
+                        <div class="stat-label">OCR Server</div>
+                        <div class="stat-value" id="statOcr">
+                            <span class="status-dot stopped"></span> Stopped
+                            <button class="btn-xs btn-primary" id="btnStartOcr" style="margin-left:8px">Start</button>
+                            <button class="btn-xs btn-danger" id="btnStopOcr" style="margin-left:4px" disabled>Stop</button>
+                        </div>
+                    </div>
+                    <div class="stat-card">
                         <div class="stat-label">Current Player</div>
                         <div class="stat-value" id="statPlayer">—</div>
                     </div>
@@ -125,6 +133,7 @@
                 <header class="view-header">
                     <h1>Accounts</h1>
                     <div class="header-actions">
+                        <button class="btn btn-primary" onclick="openNewAccountModal()">+ Add Account</button>
                         <button class="btn btn-secondary" onclick="refreshAccounts()">↻ Refresh</button>
                     </div>
                 </header>
@@ -151,17 +160,67 @@
 
     <!-- Task Selection Modal -->
     <div class="modal-overlay" id="taskModal">
-        <div class="modal">
+        <div class="modal modal-wide">
             <div class="modal-header">
-                <h2>Select Tasks to Run</h2>
+                <h2>Configure & Start Bot</h2>
                 <button class="btn-icon" onclick="closeTaskModal()">✕</button>
             </div>
             <div class="modal-body">
-                <div class="task-grid compact" id="modalTaskGrid"></div>
+                <!-- Account/Character Selector -->
+                <div class="modal-section">
+                    <div class="modal-section-header">
+                        <h3>👤 Accounts & Characters</h3>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="selectAllAccounts" checked onchange="toggleAllAccounts()"> All
+                        </label>
+                    </div>
+                    <div class="account-selector" id="accountSelector"></div>
+                </div>
+                <!-- Task Selector -->
+                <div class="modal-section">
+                    <div class="modal-section-header">
+                        <h3>📋 Tasks</h3>
+                        <div>
+                            <button class="btn-xs btn-secondary" onclick="selectAllTasks()">All</button>
+                            <button class="btn-xs btn-secondary" onclick="deselectAllTasks()">Clear</button>
+                        </div>
+                    </div>
+                    <div class="task-grid compact" id="modalTaskGrid"></div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeTaskModal()">Cancel</button>
                 <button class="btn btn-primary" id="btnConfirmStart">▶ Start Bot</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Edit Modal -->
+    <div class="modal-overlay" id="accountEditModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="accountEditTitle">Edit Account</h2>
+                <button class="btn-icon" onclick="closeAccountEditModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="editEmail" class="form-input" placeholder="account@gmail.com">
+                </div>
+                <div class="form-group">
+                    <label>Priority</label>
+                    <input type="number" id="editPriority" class="form-input" value="999" min="1">
+                </div>
+                <div class="form-group">
+                    <label>Characters</label>
+                    <div id="editPlayerList" class="player-edit-list"></div>
+                    <button class="btn-xs btn-secondary" onclick="addPlayerField()" style="margin-top:8px">+ Add Character</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" id="btnDeleteAccount" onclick="deleteEditingAccount()">Delete</button>
+                <button class="btn btn-secondary" onclick="closeAccountEditModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveAccountEdit()">Save</button>
             </div>
         </div>
     </div>
