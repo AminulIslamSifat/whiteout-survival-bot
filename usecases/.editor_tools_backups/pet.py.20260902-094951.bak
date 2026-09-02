@@ -1,8 +1,3 @@
-TASK_METADATA = [
-    {"key": "pet_treasure", "title": "Ally Treasure", "description": "Collect ally treasure.", "func": "collect_ally_treasure"},
-    {"key": "pet_exploration", "title": "Pet Exploration", "description": "Start pet exploration.", "func": "start_pet_exploration"},
-]
-
 import time
 from core.recalibrate import recalibrate
 

@@ -91,43 +91,31 @@ def _load_completion_log() -> list[dict]:
     return records
 
 
-def _discover_tasks() -> list[dict]:
-    """Parse TASK_METADATA from usecases/ via AST — no imports, no side effects."""
-    import ast
-    usecases_dir = PROJECT_ROOT / "usecases"
-    tasks = []
-    seen_keys: set[str] = set()
-
-    for pyfile in sorted(usecases_dir.glob("*.py")):
-        if pyfile.name.startswith("_"):
-            continue
-        try:
-            tree = ast.parse(pyfile.read_text())
-        except SyntaxError:
-            continue
-
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign):
-                continue
-            for target in node.targets:
-                if not (isinstance(target, ast.Name) and target.id == "TASK_METADATA"):
-                    continue
-                try:
-                    entries = ast.literal_eval(node.value)
-                except (ValueError, TypeError):
-                    continue
-                for entry in entries:
-                    key = entry.get("key")
-                    if not key or key in seen_keys:
-                        continue
-                    seen_keys.add(key)
-                    tasks.append({
-                        "key": key,
-                        "title": entry.get("title", key),
-                        "description": entry.get("description", ""),
-                    })
-
-    return tasks
+def _get_available_tasks() -> list[dict]:
+    """Return available tasks by importing TaskSpec from task_menu."""
+    # We read the TASKS list structure without importing (to avoid side effects)
+    # Instead, we maintain a parallel list here that mirrors task_menu.TASKS
+    return [
+        {"key": "vip", "title": "VIP Rewards", "description": "Collect VIP rewards before anything else."},
+        {"key": "exploration_idle", "title": "Exploration Idle Income", "description": "Claim passive exploration income."},
+        {"key": "exploration_continue", "title": "Continue Exploring", "description": "Resume exploration progress."},
+        {"key": "mail", "title": "Mail Rewards", "description": "Collect mailbox rewards."},
+        {"key": "life_essence", "title": "Life Essence", "description": "Collect life essence."},
+        {"key": "training", "title": "Train Troops", "description": "Run the troop training routine."},
+        {"key": "arena", "title": "Arena", "description": "Enter the arena routine."},
+        {"key": "chief_order", "title": "Chief Order", "description": "Activate chief order tasks."},
+        {"key": "pet_treasure", "title": "Ally Treasure", "description": "Collect ally treasure."},
+        {"key": "pet_exploration", "title": "Pet Exploration", "description": "Start pet exploration."},
+        {"key": "labyrinth", "title": "Labyrinth", "description": "Run the labyrinth routine."},
+        {"key": "alliance_join", "title": "Alliance Auto Join", "description": "Auto-join alliance activity."},
+        {"key": "alliance_chests", "title": "Alliance Chests", "description": "Collect alliance chests."},
+        {"key": "alliance_tech", "title": "Alliance Tech", "description": "Contribute to alliance tech."},
+        {"key": "alliance_help", "title": "Alliance Help", "description": "Send alliance help."},
+        {"key": "alliance_triumph", "title": "Alliance Triumph", "description": "Collect triumph rewards."},
+        {"key": "heal", "title": "Heal", "description": "Run healing workflow."},
+        {"key": "gather", "title": "World Gather", "description": "Gather resources with current character rules."},
+        {"key": "missions", "title": "Missions Reward", "description": "Collect mission rewards."},
+    ]
 
 
 async def _broadcast_log(line: str):
@@ -150,8 +138,8 @@ def _parse_bot_output(line: str):
 
     if "running tasks for:" in line_lower:
         _current_player = line.split("Running tasks for:")[-1].strip()
-    elif "running" in line_lower and any(t["title"].lower() in line_lower for t in _discover_tasks()):
-        for t in _discover_tasks():
+    elif "running" in line_lower and any(t["title"].lower() in line_lower for t in _get_available_tasks()):
+        for t in _get_available_tasks():
             if t["title"].lower() in line_lower:
                 _current_task = t["title"]
                 break
@@ -201,7 +189,7 @@ async def get_status():
 
 @app.get("/api/tasks")
 async def get_tasks():
-    return _discover_tasks()
+    return _get_available_tasks()
 
 
 @app.post("/api/bot/start")
@@ -218,8 +206,8 @@ async def start_bot(selection: TaskSelection):
     _log_lines.clear()
     _bot_status = "starting"
 
-    # Send task keys as JSON via stdin
-    task_json = json.dumps({"tasks": selection.tasks}) + "\n"
+    # Build task input string for the bot's stdin
+    task_input = ",".join(selection.tasks) + "\n"
 
     try:
         _bot_process = subprocess.Popen(
@@ -231,8 +219,8 @@ async def start_bot(selection: TaskSelection):
             env={**os.environ, "PYTHONUNBUFFERED": "1"},
         )
 
-        # Send JSON task selection to bot's stdin
-        _bot_process.stdin.write(task_json.encode())
+        # Send task selection to bot's stdin
+        _bot_process.stdin.write(task_input.encode())
         _bot_process.stdin.flush()
         _bot_process.stdin.close()
 

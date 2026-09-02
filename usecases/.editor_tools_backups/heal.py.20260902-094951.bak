@@ -1,7 +1,3 @@
-TASK_METADATA = [
-    {"key": "heal", "title": "Heal", "description": "Run healing workflow.", "func": "heal"},
-]
-
 import time
 
 import time

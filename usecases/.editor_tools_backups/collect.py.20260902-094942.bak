@@ -1,9 +1,3 @@
-TASK_METADATA = [
-    {"key": "missions", "title": "Missions Reward", "description": "Collect mission rewards.", "func": "collect_missions_reward"},
-    {"key": "life_essence", "title": "Life Essence", "description": "Collect life essence.", "func": "collect_life_essence"},
-    {"key": "event_collect", "title": "Event Rewards", "description": "Collect from active events.", "func": "collect_from_events"},
-]
-
 import time
 from core.recalibrate import recalibrate
 

@@ -1,7 +1,3 @@
-TASK_METADATA = [
-    {"key": "labyrinth", "title": "Labyrinth", "description": "Run the labyrinth routine.", "func": "labyrinth"},
-]
-
 import time
 from core.recalibrate import recalibrate
 

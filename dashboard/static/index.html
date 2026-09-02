@@ -16,7 +16,7 @@
             </div>
             <div class="nav-items">
                 <button class="nav-item active" data-view="dashboard">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
                     <span>Dashboard</span>
                 </button>
                 <button class="nav-item" data-view="tasks">
@@ -113,7 +113,7 @@
                     <h1>Task Selection</h1>
                     <div class="header-actions">
                         <button class="btn btn-secondary" id="btnSelectAll">Select All</button>
-                        <button class="btn btn-secondary" id="btnDeselectAll">Deselect All</button>
+                        <button class="btn btn-secondary" id="btnDeselectAll">Clear</button>
                         <button class="btn btn-primary" id="btnStartWithTasks">▶ Start with Selected</button>
                     </div>
                 </header>
@@ -153,7 +153,7 @@
     <div class="modal-overlay" id="taskModal">
         <div class="modal">
             <div class="modal-header">
-                <h2>Select Tasks</h2>
+                <h2>Select Tasks to Run</h2>
                 <button class="btn-icon" onclick="closeTaskModal()">✕</button>
             </div>
             <div class="modal-body">
@@ -161,10 +161,13 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeTaskModal()">Cancel</button>
-                <button class="btn btn-primary" id="btnConfirmStart">Start Bot</button>
+                <button class="btn btn-primary" id="btnConfirmStart">▶ Start Bot</button>
             </div>
         </div>
     </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
 
     <script src="/static/app.js"></script>
 </body>

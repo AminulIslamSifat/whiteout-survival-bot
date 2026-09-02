@@ -1,7 +1,3 @@
-TASK_METADATA = [
-    {"key": "training", "title": "Train Troops", "description": "Run the troop training routine.", "func": "train"},
-]
-
 import time
 from core.recalibrate import recalibrate
 

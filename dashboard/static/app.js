@@ -4,6 +4,16 @@ let selectedTasks = new Set();
 let eventSource = null;
 let statusInterval = null;
 
+// --- Toast Notifications ---
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+}
+
 // --- Navigation ---
 document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -14,6 +24,13 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 
         if (btn.dataset.view === 'accounts') refreshAccounts();
         if (btn.dataset.view === 'tasks') renderTaskGrid();
+        if (btn.dataset.view === 'logs') {
+            // Scroll to bottom when switching to logs
+            setTimeout(() => {
+                const c = document.getElementById('fullLogContainer');
+                c.scrollTop = c.scrollHeight;
+            }, 50);
+        }
     });
 });
 
@@ -31,10 +48,20 @@ async function api(path, opts = {}) {
 }
 
 // --- Status Polling ---
+let lastStatus = 'stopped';
+
 async function pollStatus() {
     try {
         const s = await api('/api/status');
         updateStatusUI(s);
+
+        // Notify on status change
+        if (s.status !== lastStatus) {
+            if (s.status === 'running') showToast('Bot started successfully', 'success');
+            else if (s.status === 'stopped' && lastStatus === 'running') showToast('Bot stopped', 'info');
+            else if (s.status === 'error') showToast('Bot encountered an error', 'error');
+            lastStatus = s.status;
+        }
     } catch (e) {
         console.error('Status poll failed:', e);
     }
@@ -49,20 +76,17 @@ function updateStatusUI(s) {
     sidebarDot.className = `status-dot ${dotClass}`;
     document.querySelector('#sidebarStatus .status-label').textContent = label;
 
-    // Dashboard stat card
+    // Dashboard stat cards
     document.getElementById('statStatus').innerHTML = `<span class="status-dot ${dotClass}"></span> ${label}`;
     document.getElementById('statPlayer').textContent = s.current_player || '—';
     document.getElementById('statTask').textContent = s.current_task || '—';
 
     // Button states
-    const startBtn = document.getElementById('btnStartBot');
-    const stopBtn = document.getElementById('btnStopBot');
+    const isRunning = s.status === 'running' || s.status === 'starting';
+    document.getElementById('btnStartBot').disabled = isRunning;
+    document.getElementById('btnStopBot').disabled = !isRunning;
     const modalStartBtn = document.getElementById('btnConfirmStart');
     const taskStartBtn = document.getElementById('btnStartWithTasks');
-
-    const isRunning = s.status === 'running' || s.status === 'starting';
-    startBtn.disabled = isRunning;
-    stopBtn.disabled = !isRunning;
     if (modalStartBtn) modalStartBtn.disabled = isRunning;
     if (taskStartBtn) taskStartBtn.disabled = isRunning;
 }
@@ -86,7 +110,8 @@ function connectLogStream() {
 
 function appendLogLine(line) {
     const cssClass = classifyLogLine(line);
-    const html = `<div class="log-line ${cssClass}">${escapeHtml(line)}</div>`;
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const html = `<div class="log-line ${cssClass}"><span style="opacity:0.4;margin-right:8px">${time}</span>${escapeHtml(line)}</div>`;
 
     // Dashboard log
     const dashLog = document.getElementById('dashLogLines');
@@ -109,9 +134,13 @@ function appendLogLine(line) {
 
 function classifyLogLine(line) {
     const l = line.toLowerCase();
-    if (l.includes('error') || l.includes('failed') || l.includes('❌')) return 'error';
-    if (l.includes('✅') || l.includes('completed') || l.includes('success')) return 'success';
-    if (l.includes('[dashboard]') || l.includes('running') || l.includes('navigating')) return 'info';
+    if (l.includes('error') || l.includes('failed') || l.includes('❌') || l.includes('exception')) return 'error';
+    if (l.includes('✅') || l.includes('completed') || l.includes('marked completed') || l.includes('success')) return 'success';
+    if (l.includes('[dashboard]') || l.includes('starting bot') || l.includes('discovered')) return 'info';
+    if (l.includes('pressed on') || l.includes('tap') || l.includes('swipe')) return 'action';
+    if (l.includes('homepage') || l.includes('navigating') || l.includes('switching') || l.includes('recalibrate')) return 'nav';
+    if (l.includes('running tasks for:') || l.includes('running task:')) return 'info';
+    if (l.includes('skipping')) return 'nav';
     return '';
 }
 
@@ -124,13 +153,20 @@ function trimLog(container, maxLines) {
 function clearLogView() {
     document.getElementById('dashLogLines').innerHTML = '';
     document.getElementById('fullLogLines').innerHTML = '';
+    showToast('Logs cleared', 'info');
 }
 
 // --- Tasks ---
 async function loadTasks() {
-    const tasks = await api('/api/tasks');
-    window._tasks = tasks;
-    return tasks;
+    try {
+        const tasks = await api('/api/tasks');
+        window._tasks = tasks;
+        return tasks;
+    } catch (e) {
+        console.error('Failed to load tasks:', e);
+        showToast('Failed to load tasks', 'error');
+        return [];
+    }
 }
 
 function renderTaskGrid() {
@@ -138,11 +174,18 @@ function renderTaskGrid() {
     const grid = document.getElementById('taskGrid');
     const modalGrid = document.getElementById('modalTaskGrid');
 
+    if (!tasks.length) {
+        const empty = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No tasks discovered</div></div>';
+        grid.innerHTML = empty;
+        if (modalGrid) modalGrid.innerHTML = empty;
+        return;
+    }
+
     const html = tasks.map(t => `
         <div class="task-card ${selectedTasks.has(t.key) ? 'selected' : ''}" data-key="${t.key}" onclick="toggleTask('${t.key}')">
-            <div class="task-check"></div>
-            <div class="task-title">${t.title}</div>
-            <div class="task-desc">${t.description}</div>
+            <div class="task-title">${escapeHtml(t.title)}</div>
+            <div class="task-desc">${escapeHtml(t.description)}</div>
+            <div class="task-key">${escapeHtml(t.key)}</div>
         </div>
     `).join('');
 
@@ -159,33 +202,41 @@ function toggleTask(key) {
 document.getElementById('btnSelectAll').addEventListener('click', () => {
     (window._tasks || []).forEach(t => selectedTasks.add(t.key));
     renderTaskGrid();
+    showToast(`Selected all ${selectedTasks.size} tasks`, 'info');
 });
 
 document.getElementById('btnDeselectAll').addEventListener('click', () => {
     selectedTasks.clear();
     renderTaskGrid();
+    showToast('Cleared selection', 'info');
 });
 
 // --- Bot Control ---
 document.getElementById('btnStartBot').addEventListener('click', openTaskModal);
 
 document.getElementById('btnStartWithTasks').addEventListener('click', async () => {
-    if (selectedTasks.size === 0) return alert('Select at least one task');
+    if (selectedTasks.size === 0) {
+        showToast('Select at least one task first', 'error');
+        return;
+    }
     await startBot([...selectedTasks]);
 });
 
 document.getElementById('btnConfirmStart').addEventListener('click', async () => {
-    if (selectedTasks.size === 0) return alert('Select at least one task');
+    if (selectedTasks.size === 0) {
+        showToast('Select at least one task', 'error');
+        return;
+    }
     closeTaskModal();
     await startBot([...selectedTasks]);
 });
 
 document.getElementById('btnStopBot').addEventListener('click', async () => {
-    if (!confirm('Stop the bot?')) return;
     try {
         await api('/api/bot/stop', { method: 'POST' });
+        showToast('Stopping bot...', 'info');
     } catch (e) {
-        alert(e.message);
+        showToast(e.message, 'error');
     }
 });
 
@@ -195,8 +246,11 @@ async function startBot(tasks) {
             method: 'POST',
             body: JSON.stringify({ tasks }),
         });
+        showToast(`Bot started with ${tasks.length} tasks`, 'success');
+        // Switch to dashboard to see live status
+        document.querySelector('[data-view="dashboard"]').click();
     } catch (e) {
-        alert(e.message);
+        showToast(e.message, 'error');
     }
 }
 
@@ -210,6 +264,16 @@ function closeTaskModal() {
     document.getElementById('taskModal').classList.remove('open');
 }
 
+// Close modal on overlay click
+document.getElementById('taskModal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeTaskModal();
+});
+
+// Close modal on Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeTaskModal();
+});
+
 // --- Accounts ---
 async function refreshAccounts() {
     try {
@@ -218,20 +282,21 @@ async function refreshAccounts() {
         renderAccounts(accounts);
     } catch (e) {
         console.error('Failed to load accounts:', e);
+        showToast('Failed to load accounts', 'error');
     }
 }
 
 function renderAccounts(accounts) {
     const list = document.getElementById('accountsList');
     if (!accounts.length) {
-        list.innerHTML = '<div style="color:var(--text-muted);padding:20px;">No accounts configured</div>';
+        list.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">No accounts configured</div></div>';
         return;
     }
     list.innerHTML = accounts.map(a => `
         <div class="account-card">
             <div class="account-header">
                 <span class="account-email">${escapeHtml(a.email)}</span>
-                <span class="account-priority">Priority ${a.priority}</span>
+                <span class="account-priority">#${a.priority}</span>
             </div>
             <div class="player-list">
                 ${a.players.map(p => `
@@ -258,22 +323,29 @@ async function refreshCompletion() {
 function renderCompletion(records) {
     const tbody = document.querySelector('#completionTable tbody');
     if (!records.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No completion records yet</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state" style="padding:24px"><div class="empty-icon">📊</div><div class="empty-text">No completion records yet</div></div></td></tr>';
         return;
     }
     tbody.innerHTML = records.map(r => `
         <tr>
-            <td style="font-weight:600;color:var(--text)">${escapeHtml(r.player_name)}</td>
+            <td style="font-weight:700;color:var(--text)">${escapeHtml(r.player_name)}</td>
             <td>${escapeHtml(r.email)}</td>
-            <td>${r.last_completed}</td>
-            <td>${r.hours_ago}h</td>
-            <td><span class="badge ${r.in_cooldown ? 'badge-cooldown' : 'badge-ready'}">${r.in_cooldown ? 'Cooldown' : 'Ready'}</span></td>
+            <td style="font-family:var(--mono);font-size:12px">${r.last_completed}</td>
+            <td style="font-family:var(--mono);font-size:12px">${formatDuration(r.hours_ago)}</td>
+            <td><span class="badge ${r.in_cooldown ? 'badge-cooldown' : 'badge-ready'}">${r.in_cooldown ? '⏳ Cooldown' : '✓ Ready'}</span></td>
         </tr>
     `).join('');
 }
 
+function formatDuration(hours) {
+    if (hours < 1) return `${Math.round(hours * 60)}m ago`;
+    if (hours < 24) return `${Math.round(hours)}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+}
+
 // --- Utils ---
 function escapeHtml(str) {
+    if (!str) return '';
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;

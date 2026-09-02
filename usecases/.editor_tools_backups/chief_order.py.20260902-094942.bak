@@ -1,7 +1,3 @@
-TASK_METADATA = [
-    {"key": "chief_order", "title": "Chief Order", "description": "Activate chief order tasks.", "func": "activate_chief_order"},
-]
-
 #coming soon
 import time
 

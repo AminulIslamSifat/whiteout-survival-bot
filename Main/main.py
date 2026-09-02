@@ -1,90 +1,32 @@
+"""
+WOS-Bot — Headless Runner
+Receives task keys via stdin JSON or --tasks CLI arg.
+No interactive CLI. Controlled entirely by the dashboard API.
+"""
+
 import os
 import sys
-import cv2
-import time
 import json
-import requests
-import subprocess
-import numpy as np
+import time
+import argparse
 from datetime import datetime
-from rich.panel import Panel
-from rich.console import Console
-from rapidfuzz import fuzz
-import re
+from pathlib import Path
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from cmd_program.screen_action import (
-    tap_screen,
-    swipe_screen,
-    long_press,
-    take_screenshot
-)
+from rich.console import Console
+from rich.panel import Panel
 
-from core.core import (
-    req_ocr,
-    req_temp_match,
-    tap_on_template,
-    req_text
-)
-from core.coord_utils import pct_to_px
-
-from usecases.exploration import(
-    claim_exploration_idle_income,
-    continue_exploring
-)
-from usecases.alliance import(
-    tech_contribution,
-    auto_join,
-    collect_chests,
-    collect_triumph,
-    help
-)
-from usecases.vip import (
-    collect_vip_rewards,
-    buy_vip_time
-)
-from usecases.heal import (
-    heal
-)
-from usecases.arena import (
-    arena
-)
-from usecases.mail import (
-    collect_mail_rewards
-)
-from usecases.training_troops import(
-    train,
-    train_lancer,
-    train_infantry,
-    train_marksman
-)
-from usecases.intel import (
-    intel
-)
-from usecases.collect import (
-    collect_missions_reward,
-    collect_life_essence,
-    collect_from_events
-)
-from usecases.chief_order import(
-    activate_chief_order
-)
-from usecases.pet import (
-    collect_ally_treasure,
-    start_pet_exploration
-)
-from usecases.labyrinth import labyrinth
-
+from core.core import req_text
 from core.recalibrate import recalibrate
+from cmd_program.screen_action import tap_screen
 from core.change_player import change_account, change_character
 
-from Main.task_menu import prompt_task_selection, run_selected_tasks
-
-
-
+console = Console()
+COMPLETION_LOG_PATH = "db/completion_log.txt"
+SKIP_WINDOW_SECONDS = 3 * 60 * 60
 
 
 class Player:
@@ -92,52 +34,68 @@ class Player:
         self.name = name
         self.id = id
         self.state = state
-        self.email = email 
+        self.email = email
 
 
-COMPLETION_LOG_PATH = "db/completion_log.txt"
-SKIP_WINDOW_SECONDS = 3 * 60 * 60
-console = Console()
+# --- Task Registry (dynamic from usecases) ---
+def _discover_tasks():
+    """Scan usecases/ for TASK_METADATA and build key->callable map."""
+    import importlib
+    usecases_dir = Path(PROJECT_ROOT) / "usecases"
+    task_map = {}
+    task_list = []
+
+    for pyfile in sorted(usecases_dir.glob("*.py")):
+        if pyfile.name.startswith("_"):
+            continue
+        module_name = f"usecases.{pyfile.stem}"
+        try:
+            mod = importlib.import_module(module_name)
+        except Exception as e:
+            print(f"⚠️ Could not import {module_name}: {e}")
+            continue
+
+        metadata = getattr(mod, "TASK_METADATA", None)
+        if not metadata:
+            continue
+
+        for entry in metadata:
+            key = entry["key"]
+            func_name = entry["func"]
+            func = getattr(mod, func_name, None)
+            if func is None:
+                print(f"⚠️ {module_name}.{func_name} not found, skipping {key}")
+                continue
+            task_map[key] = func
+            task_list.append({
+                "key": key,
+                "title": entry["title"],
+                "description": entry.get("description", ""),
+            })
+
+    return task_map, task_list
 
 
-
-def start_game(game_name="com.gof.global/com.unity3d.player.MyMainPlayerActivity"):
-    wos_adb_command = [
-        "adb", 
-        "shell", 
-        "am", 
-        "start", 
-        "-n", 
-        game_name
-    ]
-    subprocess.run(wos_adb_command)
+TASK_MAP, TASK_LIST = _discover_tasks()
 
 
-
+# --- Completion Log ---
 def load_completion_log():
     records = {}
-
     if not os.path.exists(COMPLETION_LOG_PATH):
         return records
-
     with open(COMPLETION_LOG_PATH, "r") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
-
             parts = line.split("|")
             if len(parts) < 2:
                 continue
-
-            player_id = parts[0].strip().lower()
             try:
-                ts = float(parts[1].strip())
+                records[parts[0].strip().lower()] = float(parts[1].strip())
             except ValueError:
                 continue
-
-            records[player_id] = ts
-
     return records
 
 
@@ -146,7 +104,6 @@ def save_completion_log(records):
     for player_id, ts in sorted(records.items()):
         iso_time = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
         lines.append(f"{player_id}|{ts}|{iso_time}")
-
     with open(COMPLETION_LOG_PATH, "w") as f:
         f.write("\n".join(lines))
         if lines:
@@ -165,17 +122,16 @@ def mark_player_completed(player_id, records):
     save_completion_log(records)
 
 
-
-
+# --- Account Loading ---
 def init_database():
     global player_data, email_list, player_list
     path = "db/account.json"
     with open(path) as f:
         player_data = json.load(f)
-    
+
     sorted_player_data = sorted(
         player_data.items(),
-        key = lambda item: item[1].get("priority", float("inf"))
+        key=lambda item: item[1].get("priority", float("inf"))
     )
 
     player_list = []
@@ -189,15 +145,21 @@ def init_database():
     player_data = sorted_player_data
 
 
+# --- Player Initialization ---
+current_player = None
+
 
 def player_initialization():
     recalibrate()
     tap_screen(4.63, 6.1)
     time.sleep(2)
     global current_player
+
     try:
         time.sleep(1)
-        # read and sanitize page title using OCR filtering helpers
+        from rapidfuzz import fuzz
+        import re
+
         def clean_text(s):
             if not s:
                 return ""
@@ -218,7 +180,6 @@ def player_initialization():
             return False
 
         def pick_best_text(ocr_results, expected=None, min_len=2):
-            # ocr_results is list of [text, box]
             candidates = []
             for entry in (ocr_results or []):
                 txt = entry[0] if isinstance(entry, (list, tuple)) and entry else entry
@@ -240,18 +201,15 @@ def player_initialization():
     except Exception as e:
         print(f"Reading error - {e}, Ending the task")
         return None
+
     time.sleep(1)
+    data = req_text([
+        "ChiefProfile.PlayerName",
+        "ChiefProfile.PlayerID",
+        "ChiefProfile.FurnaceLevel",
+        "ChiefProfile.State"
+    ])
 
-    data = req_text(
-        [
-            "ChiefProfile.PlayerName",
-            "ChiefProfile.PlayerID", 
-            "ChiefProfile.FurnaceLevel", 
-            "ChiefProfile.State"
-        ]
-    )
-
-    # safer extraction/helpers
     def extract_after_delim(s, delim, default=None):
         if not s:
             return default
@@ -270,25 +228,22 @@ def player_initialization():
         if not s:
             return None
         s = s.strip()
-        # prefer sequences of digits or alnum of length >=4
         m = re.search(r"\d{4,}", s)
         if m:
             return m.group(0)
         m = re.search(r"[A-Za-z0-9\-]{4,}", s)
         return m.group(0) if m else s
 
-    # pick best text per field
     name_raw = pick_best_text([data[0]]) if data and len(data) > 0 else None
     id_raw = pick_best_text([data[1]]) if data and len(data) > 1 else None
     furnace_raw = pick_best_text([data[2]]) if data and len(data) > 2 else None
     state_raw = pick_best_text([data[3]]) if data and len(data) > 3 else None
 
-    # cleanup and extract values
     name = extract_after_delim(name_raw, ']') if name_raw else None
     id_val = extract_id(id_raw) if id_raw else None
     furnace = extract_first_number(furnace_raw) if furnace_raw else None
     state = extract_after_delim(state_raw, '#') if state_raw else (state_raw or None)
-    
+
     current_player_id = None
     current_email = None
 
@@ -308,18 +263,11 @@ def player_initialization():
         title="[bold magenta]🎮 Player Summary[/bold magenta]",
         border_style="bright_blue"
     ))
-    
-    
-
-
-start_game()
-init_database()
 
 
 def get_next_email(current_email):
     if not email_list:
         return None
-
     try:
         idx = email_list.index(current_email)
         return email_list[(idx + 1) % len(email_list)]
@@ -334,24 +282,34 @@ def get_players_by_email(target_email):
     return []
 
 
+def run_selected_tasks(current_player_id, selected_task_keys):
+    for key in selected_task_keys:
+        func = TASK_MAP.get(key)
+        if func is None:
+            print(f"⚠️ Unknown task key: {key}")
+            continue
+        print(f"▶ Running task: {key}")
+        try:
+            # Some tasks accept player_id, some don't
+            import inspect
+            sig = inspect.signature(func)
+            if len(sig.parameters) > 0:
+                func(current_player_id)
+            else:
+                func()
+        except Exception as e:
+            print(f"❌ Task {key} failed: {e}")
 
-def run_task(current_player_id, selected_tasks):
-    run_selected_tasks(current_player_id, selected_tasks)
 
-
-
-
-def run_bot(selected_tasks):
+def run_bot(selected_task_keys):
     completion_records = load_completion_log()
 
     while True:
         player_initialization()
 
-        #----Config----
         current_email = current_player.email
         next_email = get_next_email(current_email)
 
-        #----- Run all characters under current email -----
         current_email_players = get_players_by_email(current_email)
         if not current_email_players:
             raise RuntimeError(f"No players configured for email: {current_email}")
@@ -367,7 +325,7 @@ def run_bot(selected_tasks):
                     print(f"Skipping {current_player.name} ({current_player.id}) - completed recently at {last_time}")
                 else:
                     print(f"Running tasks for: {current_player.name} ({current_player.id})")
-                    run_task(current_player.id, selected_tasks)
+                    run_selected_tasks(current_player.id, selected_task_keys)
                     mark_player_completed(current_player.id, completion_records)
                     print(f"Marked completed: {current_player.id} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 processed_ids.add(active_id)
@@ -395,7 +353,49 @@ def run_bot(selected_tasks):
             raise RuntimeError("Account changing error")
 
 
+def main():
+    parser = argparse.ArgumentParser(description="WOS-Bot Headless Runner")
+    parser.add_argument("--tasks", type=str, help="Comma-separated task keys")
+    args = parser.parse_args()
 
-if __name__=="__main__":
-    selected_tasks = prompt_task_selection()
-    run_bot(selected_tasks)
+    # Determine task keys: CLI arg > stdin JSON > fail
+    task_keys = None
+
+    if args.tasks:
+        task_keys = [k.strip() for k in args.tasks.split(",") if k.strip()]
+    elif not sys.stdin.isatty():
+        # Read JSON from stdin (dashboard sends this)
+        try:
+            raw = sys.stdin.read().strip()
+            if raw:
+                data = json.loads(raw)
+                if isinstance(data, dict) and "tasks" in data:
+                    task_keys = data["tasks"]
+                elif isinstance(data, list):
+                    task_keys = data
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"❌ Failed to parse stdin: {e}")
+            sys.exit(1)
+
+    if not task_keys:
+        print("❌ No tasks specified. Use --tasks=key1,key2 or pipe JSON via stdin.")
+        print(f"Available tasks: {', '.join(t['key'] for t in TASK_LIST)}")
+        sys.exit(1)
+
+    # Validate
+    valid_keys = set(TASK_MAP.keys())
+    invalid = [k for k in task_keys if k not in valid_keys]
+    if invalid:
+        print(f"❌ Invalid task keys: {invalid}")
+        print(f"Available: {', '.join(sorted(valid_keys))}")
+        sys.exit(1)
+
+    print(f"✅ Starting bot with tasks: {', '.join(task_keys)}")
+    print(f"📋 Discovered {len(TASK_MAP)} tasks from usecases/")
+
+    init_database()
+    run_bot(task_keys)
+
+
+if __name__ == "__main__":
+    main()

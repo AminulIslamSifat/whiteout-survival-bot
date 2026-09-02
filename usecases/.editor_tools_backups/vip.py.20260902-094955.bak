@@ -1,7 +1,3 @@
-TASK_METADATA = [
-    {"key": "vip", "title": "VIP Rewards", "description": "Collect VIP rewards before anything else.", "func": "collect_vip_rewards"},
-]
-
 import time
 from core.recalibrate import recalibrate
 

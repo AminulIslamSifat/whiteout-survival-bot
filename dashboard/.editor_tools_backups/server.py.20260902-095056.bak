@@ -92,40 +92,36 @@ def _load_completion_log() -> list[dict]:
 
 
 def _discover_tasks() -> list[dict]:
-    """Parse TASK_METADATA from usecases/ via AST — no imports, no side effects."""
-    import ast
+    """Dynamically scan usecases/ for TASK_METADATA at module level."""
+    import importlib
     usecases_dir = PROJECT_ROOT / "usecases"
     tasks = []
-    seen_keys: set[str] = set()
+    seen_keys = set()
 
     for pyfile in sorted(usecases_dir.glob("*.py")):
         if pyfile.name.startswith("_"):
             continue
+        module_name = f"usecases.{pyfile.stem}"
         try:
-            tree = ast.parse(pyfile.read_text())
-        except SyntaxError:
+            mod = importlib.import_module(module_name)
+        except Exception as e:
+            print(f"⚠️ Could not import {module_name}: {e}")
             continue
 
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign):
+        metadata = getattr(mod, "TASK_METADATA", None)
+        if not metadata:
+            continue
+
+        for entry in metadata:
+            key = entry["key"]
+            if key in seen_keys:
                 continue
-            for target in node.targets:
-                if not (isinstance(target, ast.Name) and target.id == "TASK_METADATA"):
-                    continue
-                try:
-                    entries = ast.literal_eval(node.value)
-                except (ValueError, TypeError):
-                    continue
-                for entry in entries:
-                    key = entry.get("key")
-                    if not key or key in seen_keys:
-                        continue
-                    seen_keys.add(key)
-                    tasks.append({
-                        "key": key,
-                        "title": entry.get("title", key),
-                        "description": entry.get("description", ""),
-                    })
+            seen_keys.add(key)
+            tasks.append({
+                "key": key,
+                "title": entry["title"],
+                "description": entry.get("description", ""),
+            })
 
     return tasks
 
@@ -201,7 +197,7 @@ async def get_status():
 
 @app.get("/api/tasks")
 async def get_tasks():
-    return _discover_tasks()
+    return _get_available_tasks()
 
 
 @app.post("/api/bot/start")
@@ -218,8 +214,8 @@ async def start_bot(selection: TaskSelection):
     _log_lines.clear()
     _bot_status = "starting"
 
-    # Send task keys as JSON via stdin
-    task_json = json.dumps({"tasks": selection.tasks}) + "\n"
+    # Build task input string for the bot's stdin
+    task_input = ",".join(selection.tasks) + "\n"
 
     try:
         _bot_process = subprocess.Popen(
@@ -231,8 +227,8 @@ async def start_bot(selection: TaskSelection):
             env={**os.environ, "PYTHONUNBUFFERED": "1"},
         )
 
-        # Send JSON task selection to bot's stdin
-        _bot_process.stdin.write(task_json.encode())
+        # Send task selection to bot's stdin
+        _bot_process.stdin.write(task_input.encode())
         _bot_process.stdin.flush()
         _bot_process.stdin.close()
 

@@ -1,11 +1,3 @@
-TASK_METADATA = [
-    {"key": "alliance_tech", "title": "Alliance Tech", "description": "Contribute to alliance tech.", "func": "tech_contribution"},
-    {"key": "alliance_join", "title": "Alliance Auto Join", "description": "Auto-join alliance activity.", "func": "auto_join"},
-    {"key": "alliance_chests", "title": "Alliance Chests", "description": "Collect alliance chests.", "func": "collect_chests"},
-    {"key": "alliance_help", "title": "Alliance Help", "description": "Send alliance help.", "func": "help"},
-    {"key": "alliance_triumph", "title": "Alliance Triumph", "description": "Collect triumph rewards.", "func": "collect_triumph"},
-]
-
 import time
 from core.recalibrate import recalibrate
 
