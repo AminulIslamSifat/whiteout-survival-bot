@@ -3,7 +3,11 @@ TASK_METADATA = [
 ]
 
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -44,7 +48,7 @@ def wait_till_return(lowest_time=14400):
                 return_time = return_time[0]*3600 + return_time[1]*60 + return_time[2]
                 times.append(return_time)
             except Exception as e:
-                print(f"Couldn't read the time properly - {e}")
+                logger.warning("Couldn't read the time properly - %s", e)
 
         if len(times) <= 1:
             break
@@ -56,13 +60,13 @@ def wait_till_return(lowest_time=14400):
         elif waiting_time == 0:
             recalling = False
             break
-        print(f"Waiting for {waiting_time} seconds for the troops to return home...")
+        logger.info("Waiting for %d seconds for the troops to return home...", waiting_time)
         time.sleep(waiting_time)
 
 
 
 def gather(remove_hero=False, equalize=True, lowest_time=14400):
-    print("Started Gathering...")
+    logger.info("Started Gathering...")
     search_box = [[0, 78.86, 100, 80.49]]
     gathering_nodes = ["meat", "wood", "coal", "iron", "coal", "iron"]
 
@@ -71,7 +75,7 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Reading Error - {e}")
+        logger.warning("Reading Error - %s", e)
     if title != "city":
         recalibrate()
         tap_on_text("Home.World", wait=2)
@@ -84,7 +88,7 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
         remaining_march = int(data[1]) - int(data[0])
         occupied_march = int(data[0])
     except Exception as e:
-        print(f"Reading Error - {e}")
+        logger.warning("Reading Error - %s", e)
         remaining_march = 4
         occupied_march = 0
     i = 0
@@ -94,12 +98,12 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
         if not title:
             tap_screen(50.93, 50.41)
             time.sleep(0.5)
-        print(f"Remaining march queue: {remaining_march} ----- Occupied March: {occupied_march}")
+        logger.info("Remaining march queue: %d ----- Occupied March: %d", remaining_march, occupied_march)
         if occupied_march == 5:
             break
         status = tap_on_template("World.Search", wait=2, threshold=0.6)
         if not status:
-            print("Seach Icon not found, Exiting the task...")
+            logger.warning("Search Icon not found, Exiting the task...")
             return
         found = tap_on_text(gathering_nodes[i], rois=search_box, wait=2)
         if found is None:
@@ -116,7 +120,7 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
                 time.sleep(1)
                 input_text("8")
         except Exception as e:
-            print(f"Level reading Error, Continuing without reading the level...")
+            logger.warning("Level reading Error, Continuing without reading the level...")
 
         # from here its needs to be optimized
         status = tap_on_text("World.Search.Search", wait=2)
@@ -128,7 +132,7 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
                     i = 0
                 continue
         if not status:
-            print("Gather button is not found, Exiting the task...")
+            logger.warning("Gather button is not found, Exiting the task...")
             return
         if remove_hero:
             tap_on_template("World.Deploy.RemoveHero", threshold=0.6, rois=[[27.78, 20.33, 37.04, 26.42]], wait=2)  # removing hero
@@ -146,7 +150,7 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
             remaining_march = int(data[1]) - int(data[0])
             occupied_march = int(data[0])
         except Exception as e:
-            print(f"Reading Error - {e}")
+            logger.warning("Reading Error - %s", e)
             remaining_march = remaining_march - 1
     
     time.sleep(0.5)
@@ -156,8 +160,8 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
         if text.lower() != "city":
             tap_screen(50.93, 50)
     except Exception as e:
-        print("The search tab may still opened, Trying to recover...")
-    print("Completed the gathering task, Returning to homepage...")
+        logger.warning("The search tab may still be opened, Trying to recover...")
+    logger.info("Completed the gathering task, Returning to homepage...")
     recalibrate()
 
 
@@ -170,7 +174,7 @@ def recall_current_gathering(lowest_time=14400):
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Reading Error - {e}")
+        logger.warning("Reading Error - %s", e)
     if title != "city":
         recalibrate()
         tap_on_text("Home.World", sleep=2)
@@ -182,7 +186,7 @@ def recall_current_gathering(lowest_time=14400):
         march_time = [int(t) for t in march_time]
         march_time = march_time[0]*3600 + march_time[1]*60 + march_time[2]
     except Exception as e:
-        print(f"Couldn't read the time properly - {e}")
+        logger.warning("Couldn't read the time properly - %s", e)
     
     if not isinstance(march_time, int) or march_time < lowest_time:
         found = True

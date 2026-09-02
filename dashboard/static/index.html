@@ -8,49 +8,49 @@
 </head>
 <body>
     <div class="app">
-        <!-- Sidebar -->
-        <nav class="sidebar">
-            <div class="sidebar-brand">
-                <span class="brand-icon">❄️</span>
-                <span class="brand-text">WOS-Bot</span>
-            </div>
-            <div class="nav-items">
-                <button class="nav-item active" data-view="dashboard">
+        <!-- Activity Rail (Sable-style icon sidebar) -->
+        <nav class="activity-rail">
+            <div class="rail-top">
+                <div class="rail-brand">❄️</div>
+                <button class="rail-btn active" data-view="dashboard" title="Dashboard">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-                    <span>Dashboard</span>
                 </button>
-                <button class="nav-item" data-view="tasks">
+                <button class="rail-btn" data-view="tasks" title="Tasks">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-                    <span>Tasks</span>
                 </button>
-                <button class="nav-item" data-view="accounts">
+                <button class="rail-btn" data-view="accounts" title="Accounts">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                    <span>Accounts</span>
                 </button>
-                <button class="nav-item" data-view="logs">
+                <button class="rail-btn" data-view="logs" title="Logs">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                    <span>Logs</span>
                 </button>
             </div>
-            <div class="sidebar-footer">
-                <div class="bot-status-mini" id="sidebarStatus">
-                    <span class="status-dot stopped"></span>
-                    <span class="status-label">Stopped</span>
-                </div>
+            <div class="rail-sep"></div>
+            <div class="rail-bottom">
+                <button class="rail-btn" data-view="settings" title="Settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                </button>
             </div>
         </nav>
 
         <!-- Main Content -->
-        <main class="content">
+        <main class="main-content">
             <!-- Dashboard View -->
             <section id="view-dashboard" class="view active">
                 <header class="view-header">
                     <h1>Dashboard</h1>
                     <div class="header-actions">
+                        <button class="btn btn-secondary" id="btnDonate" onclick="window.open('https://ko-fi.com/wosbot','_blank')">☕ Donate</button>
                         <button class="btn btn-primary" id="btnStartBot">▶ Start Bot</button>
                         <button class="btn btn-danger" id="btnStopBot" disabled>■ Stop</button>
                     </div>
                 </header>
+
+                <!-- ADB Warning Banner (hidden by default) -->
+                <div class="adb-warning" id="adbWarning" style="display:none;">
+                    <span class="adb-warning-icon">⚠️</span>
+                    <span class="adb-warning-text" id="adbWarningText">No ADB device connected</span>
+                </div>
 
                 <div class="stats-grid">
                     <div class="stat-card">
@@ -58,26 +58,42 @@
                         <div class="stat-value" id="statStatus">
                             <span class="status-dot stopped"></span> Stopped
                         </div>
+                        <div class="stat-detail" id="statVersion">v0.2.0</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-label">OCR Server</div>
+                        <div class="stat-label">ADB Device</div>
+                        <div class="stat-value" id="statAdb">
+                            <span class="status-dot stopped"></span> Checking…
+                        </div>
+                        <div class="stat-detail" id="statAdbDetail">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">OCR Engine</div>
                         <div class="stat-value" id="statOcr">
                             <span class="status-dot stopped"></span> Stopped
-                            <button class="btn-xs btn-primary" id="btnStartOcr" style="margin-left:8px">Start</button>
-                            <button class="btn-xs btn-danger" id="btnStopOcr" style="margin-left:4px" disabled>Stop</button>
                         </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">Current Player</div>
-                        <div class="stat-value" id="statPlayer">—</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">Current Task</div>
-                        <div class="stat-value" id="statTask">—</div>
+                        <div class="stat-detail" id="statOcrModules">—</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Total Accounts</div>
                         <div class="stat-value" id="statAccounts">0</div>
+                        <div class="stat-detail" id="statCharacters">0 characters</div>
+                    </div>
+                </div>
+
+                <!-- Dual Log Preview on Dashboard -->
+                <div class="dual-log-grid" style="margin-bottom: var(--sp-7);">
+                    <div class="log-panel">
+                        <div class="log-panel-header">
+                            <span class="log-panel-title"><span class="status-dot" id="dashBotDot"></span> Bot Log</span>
+                        </div>
+                        <div class="log-container" id="dashBotLog" style="max-height: 200px;"></div>
+                    </div>
+                    <div class="log-panel">
+                        <div class="log-panel-header">
+                            <span class="log-panel-title"><span class="status-dot" id="dashOcrDot"></span> OCR Log</span>
+                        </div>
+                        <div class="log-container" id="dashOcrLog" style="max-height: 200px;"></div>
                     </div>
                 </div>
 
@@ -90,26 +106,10 @@
                         <div class="panel-body">
                             <table class="data-table" id="completionTable">
                                 <thead>
-                                    <tr>
-                                        <th>Player</th>
-                                        <th>Account</th>
-                                        <th>Last Run</th>
-                                        <th>Ago</th>
-                                        <th>Status</th>
-                                    </tr>
+                                    <tr><th>Player</th><th>Account</th><th>Last Done</th><th>Ago</th><th>Status</th></tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
-                        </div>
-                    </div>
-
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h2>Live Log</h2>
-                            <button class="btn-icon" onclick="clearLogView()" title="Clear">✕</button>
-                        </div>
-                        <div class="panel-body log-container" id="dashLogContainer">
-                            <div class="log-lines" id="dashLogLines"></div>
                         </div>
                     </div>
                 </div>
@@ -118,11 +118,11 @@
             <!-- Tasks View -->
             <section id="view-tasks" class="view">
                 <header class="view-header">
-                    <h1>Task Selection</h1>
+                    <h1>Tasks</h1>
                     <div class="header-actions">
                         <button class="btn btn-secondary" id="btnSelectAll">Select All</button>
                         <button class="btn btn-secondary" id="btnDeselectAll">Clear</button>
-                        <button class="btn btn-primary" id="btnStartWithTasks">▶ Start with Selected</button>
+                        <button class="btn btn-primary" id="btnStartWithTasks">▶ Start Selected</button>
                     </div>
                 </header>
                 <div class="task-grid" id="taskGrid"></div>
@@ -140,10 +140,10 @@
                 <div class="accounts-list" id="accountsList"></div>
             </section>
 
-            <!-- Logs View -->
+            <!-- Logs View (Dual Panel) -->
             <section id="view-logs" class="view">
                 <header class="view-header">
-                    <h1>Full Log</h1>
+                    <h1>Live Logs</h1>
                     <div class="header-actions">
                         <button class="btn btn-secondary" onclick="clearLogView()">Clear</button>
                         <label class="toggle-label">
@@ -151,8 +151,46 @@
                         </label>
                     </div>
                 </header>
-                <div class="log-container full-log" id="fullLogContainer">
-                    <div class="log-lines" id="fullLogLines"></div>
+                <div class="dual-log-grid">
+                    <div class="log-panel">
+                        <div class="log-panel-header">
+                            <span class="log-panel-title"><span class="status-dot" id="logBotDot"></span> Bot Output</span>
+                            <button class="btn-xs" onclick="clearBotLog()">Clear</button>
+                        </div>
+                        <div class="log-container" id="botLogContainer"></div>
+                    </div>
+                    <div class="log-panel">
+                        <div class="log-panel-header">
+                            <span class="log-panel-title"><span class="status-dot" id="logOcrDot"></span> OCR Server</span>
+                            <button class="btn-xs" onclick="clearOcrLog()">Clear</button>
+                        </div>
+                        <div class="log-container" id="ocrLogContainer"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings View -->
+            <section id="view-settings" class="view">
+                <header class="view-header">
+                    <h1>Settings</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" id="btnSaveSettings">💾 Save</button>
+                    </div>
+                </header>
+                <div class="settings-grid">
+                    <div class="panel">
+                        <div class="panel-header"><h2>OCR Server</h2></div>
+                        <div class="panel-body">
+                            <div class="form-group">
+                                <label>Screen Capture Tool</label>
+                                <select id="settingCaptureTool" class="form-input">
+                                    <option value="adb">ADB</option>
+                                    <option value="scrcpy">SCRCPY</option>
+                                </select>
+                                <p class="form-hint">Method used to capture game screenshots for OCR processing.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
@@ -166,7 +204,6 @@
                 <button class="btn-icon" onclick="closeTaskModal()">✕</button>
             </div>
             <div class="modal-body">
-                <!-- Account/Character Selector -->
                 <div class="modal-section">
                     <div class="modal-section-header">
                         <h3>👤 Accounts & Characters</h3>
@@ -176,7 +213,6 @@
                     </div>
                     <div class="account-selector" id="accountSelector"></div>
                 </div>
-                <!-- Task Selector -->
                 <div class="modal-section">
                     <div class="modal-section-header">
                         <h3>📋 Tasks</h3>

@@ -7,7 +7,11 @@ TASK_METADATA = [
 ]
 
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -35,7 +39,7 @@ def tech_contribution():
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Title Reading Error, Ignoring the read...")
+        logger.warning("Title Reading Error, Ignoring the read...")
     if title != "alliance":
         recalibrate()
         tap_on_text("Home.Alliance", wait=2)
@@ -52,7 +56,7 @@ def auto_join():
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Title Reading Error, Ignoring the read...")
+        logger.warning("Title Reading Error, Ignoring the read...")
     if title != "alliance":
         recalibrate()
         tap_on_text("Home.Alliance", wait=2)
@@ -73,7 +77,7 @@ def collect_chests():
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Title Reading Error, Ignoring the read...")
+        logger.warning("Title Reading Error, Ignoring the read...")
     if title != "alliance":
         recalibrate()
         tap_on_text("Home.Alliance", wait=2)
@@ -102,7 +106,7 @@ def help():
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Title Reading Error, Ignoring the read...")
+        logger.warning("Title Reading Error, Ignoring the read...")
     if title != "alliance":
         recalibrate()
         tap_on_text("Home.Alliance", wait=2)
@@ -122,7 +126,7 @@ def collect_triumph():
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Title Reading Error, Ignoring the read...")
+        logger.warning("Title Reading Error, Ignoring the read...")
     if title != "alliance":
         recalibrate()
         tap_on_text("Home.Alliance", wait=2)
@@ -138,5 +142,5 @@ def collect_triumph():
         if activity_points[0] > activity_points[1]:
             tap_on_text(text[0][0], align=[0, -1.22])
     except Exception as e:
-        print(f"Reading Error - {e}")
+        logger.warning("Reading Error - %s", e)
 

@@ -7,13 +7,16 @@ from pathlib import Path
 import numpy as np
 import json
 from cmd_program.resolution_utils import get_stream_resolution, get_device_resolution
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 try:
     with open("cmd_program/scrcpy_config.json", "r") as file:
         config = json.load(file)
 except Exception as e:
-    print(f"Config Loading Error, {e}")
+    logger.error("Config Loading Error: %s", e)
     config = None
 
 
@@ -118,9 +121,9 @@ class ScreenStreamService:
                 stream_width, stream_height = get_stream_resolution(self.device_id, apply_scrcpy_quirk=True)
                 self.width = stream_width
                 self.height = stream_height
-                print(f"[INFO] Dynamic resolution: {self.width}x{self.height}")
+                logger.info("Dynamic resolution: %dx%d", self.width, self.height)
             except Exception as e:
-                print(f"[WARN] Failed to detect dynamic resolution: {e}. Using configured: {self.width}x{self.height}")
+                logger.warning("Failed to detect dynamic resolution: %s. Using configured: %dx%d", e, self.width, self.height)
 
         self.stop()
         self._stop_event.clear()

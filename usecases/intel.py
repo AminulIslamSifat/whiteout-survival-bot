@@ -1,6 +1,10 @@
 #coming soon
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -29,7 +33,7 @@ def recall_current_march(lowest_time=14400):
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Reading Error - {e}")
+        logger.warning("Reading Error - %s", e)
     if title != "city":
         recalibrate()
         tap_on_text("Home.World", sleep=2)
@@ -40,7 +44,7 @@ def recall_current_march(lowest_time=14400):
         time = [int(t) for t in time]
         time = time[0]*3600 + time[1]*60 + time[2]
     except Exception as e:
-        print(f"Couldn't read the time properly - {e}")
+        logger.warning("Couldn't read the time properly - %s", e)
     
     if not isinstance(time, int) or time < lowest_time:
         found = tap_on_template("World.Recall", sleep=1, threshold=0.9)
@@ -71,7 +75,7 @@ def wait_till_return(lowest_time=14400):
                 return_time = return_time[0]*3600 + return_time[1]*60 + return_time[2]
                 times.append(return_time)
             except Exception as e:
-                print(f"Couldn't read the time properly - {e}")
+                logger.warning("Couldn't read the time properly - %s", e)
 
         if len(times) <= 2:
             break
@@ -80,7 +84,7 @@ def wait_till_return(lowest_time=14400):
             recalling = recall_current_march(lowest_time=lowest_time)
         elif waiting_time == 0:
             break
-        print(f"Waiting for {waiting_time} seconds for the troops to return home...")
+        logger.info("Waiting for %d seconds for the troops to return home...", waiting_time)
         time.sleep(waiting_time)
 
 
@@ -108,7 +112,7 @@ def beast_intel():
                 data = req_text('World.MarchQueue')[0][0].split('/')
                 remaining_march = int(data[1]) - int(data[0])
             except Exception as e:
-                print(f"Reading Error - {e}")
+                logger.warning("Reading Error - %s", e)
                 remaining_march = None
 
             if remaining_march == 0:
@@ -183,7 +187,7 @@ def exploration_intel():
             tap_on_text("Tap anywhere to exit", wait=30, sleep=1)
             tap_on_template("World.Intel", sleep=1)
 
-    print("Finished the task Intel Mission, Returning...")
+    logger.info("Finished the task Intel Mission, Returning...")
     return True
 
     
@@ -191,14 +195,14 @@ def exploration_intel():
 
 def intel():
     parallel = True
-    print("Starting the task Intel Mission")
+    logger.info("Starting the task Intel Mission")
 
     title = req_text("World.City")
     recalling = False
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Reading Error - {e}")
+        logger.warning("Reading Error - %s", e)
     if title != "city":
         recalibrate()
         tap_on_text("Home.World", sleep=2)
@@ -206,7 +210,7 @@ def intel():
     status = tap_on_template("World.Intel", sleep=1)
 
     if not status:
-        print("Intel icon not found, Exiting the task...")
+        logger.warning("Intel icon not found, Exiting the task...")
         return None
 
     #Activating Agnes skill
@@ -233,7 +237,7 @@ def intel():
         wait_till_return(lowest_time=999999)
         tap_on_template("World.Intel", sleep=1)
     else:
-        print("No intel found, Exiting the task...")
+        logger.info("No intel found, Exiting the task...")
         return None
 
     survivor_intel()
@@ -244,5 +248,5 @@ def intel():
     if found:
         tap_on_text("Tap anywhere to exit", sleep=1)
     
-    print("Intel Task finished, returning...")
+    logger.info("Intel Task finished, returning...")
     return True

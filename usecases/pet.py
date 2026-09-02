@@ -4,7 +4,11 @@ TASK_METADATA = [
 ]
 
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -67,14 +71,14 @@ def start_pet_exploration():
             if len(t[0].split(":")) == 3:
                 adventuring += 1
     except Exception as e:
-        print(f"Reading Error - {e}, Exiting the task...")
+        logger.error("Reading Error - %s, Exiting the task...", e)
         return None
 
     status = True
     while(status):
         status = tap_on_template("Home.Pet.BeastCage.Adventure.CompletedAdventure", wait=2)
         if not status:
-            print("No adventure Completed")
+            logger.info("No adventure Completed")
             break
         if tap_on_text("Home.Pet.BeastCage.Adventure.Completed", wait=2, tap=False):
             tap_screen(51.85, 62.60)
@@ -89,10 +93,10 @@ def start_pet_exploration():
                 if len(t[0].split(":")) == 3:
                     adventuring += 1
         except Exception as e:
-            print(f"Reading Error - {e}, Exiting the task...")
+            logger.error("Reading Error - %s, Exiting the task...", e)
             adventuring += 1
             remaining_attempts -= 1
-        print(f"Remaining Attempt: {remaining_attempts}, Adventuring: {adventuring}")
+        logger.info("Remaining Attempt: %s, Adventuring: %s", remaining_attempts, adventuring)
 
         treasure_boxs = [
             "Home.Pet.BeastCage.Adventure.RedTreasure",
@@ -134,7 +138,7 @@ def start_pet_exploration():
                 if not status:
                     status = tap_on_text("Home.Pet.BeastCage.Adventure.SelectPet.InsuffiecientAdventureAttempts", wait=2, tap=False)
                     if status:
-                        print("Insufficint Adventure Attempts")
+                        logger.warning("Insufficient Adventure Attempts")
                         tap_on_template("Global.Close", wait=2, sleep=0.5)
                         tap_on_template("Global.Close", wait=2)
                         continue
@@ -150,9 +154,9 @@ def start_pet_exploration():
                 tap_on_template("Global.Close", wait=2)
                 continue
             else:
-                print("Something went wrong")
+                logger.error("Something went wrong")
 
-    print("Task - Pet Exploration Completed, Returning to homepage...")
+    logger.info("Task - Pet Exploration Completed, Returning to homepage...")
 
 
 

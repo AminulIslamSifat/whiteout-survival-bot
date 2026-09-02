@@ -1,14 +1,15 @@
-// WOS-Bot Dashboard Frontend
+// WOS-Bot Dashboard Frontend — Sable-inspired UI
 const API = '';
 let selectedTasks = new Set();
-let selectedAccountEmails = new Set();  // accounts selected for bot run
-let selectedCharacters = {};  // email -> Set of player_ids selected for bot run
-let eventSource = null;
+let selectedAccountEmails = new Set();
+let selectedCharacters = {};  // email -> Set of player_ids
+let botEventSource = null;
 let ocrEventSource = null;
 let statusInterval = null;
-let _accountsCache = [];  // cached for modal selector
+let _accountsCache = [];
+let _tasks = [];
 
-// --- Toast Notifications ---
+// --- Toast ---
 function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
@@ -18,27 +19,27 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.remove(), 4000);
 }
 
-// --- Navigation ---
-document.querySelectorAll('.nav-item').forEach(btn => {
+// --- Navigation (Activity Rail) ---
+document.querySelectorAll('.rail-btn[data-view]').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.rail-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById(`view-${btn.dataset.view}`).classList.add('active');
 
         if (btn.dataset.view === 'accounts') refreshAccounts();
         if (btn.dataset.view === 'tasks') renderTaskGrid();
+        if (btn.dataset.view === 'settings') loadSettings();
         if (btn.dataset.view === 'logs') {
-            // Scroll to bottom when switching to logs
             setTimeout(() => {
-                const c = document.getElementById('fullLogContainer');
-                c.scrollTop = c.scrollHeight;
+                document.getElementById('botLogContainer').scrollTop = document.getElementById('botLogContainer').scrollHeight;
+                document.getElementById('ocrLogContainer').scrollTop = document.getElementById('ocrLogContainer').scrollHeight;
             }, 50);
         }
     });
 });
 
-// --- API Helpers ---
+// --- API Helper ---
 async function api(path, opts = {}) {
     const res = await fetch(`${API}${path}`, {
         headers: { 'Content-Type': 'application/json' },
@@ -58,8 +59,6 @@ async function pollStatus() {
     try {
         const s = await api('/api/status');
         updateStatusUI(s);
-
-        // Notify on status change
         if (s.status !== lastStatus) {
             if (s.status === 'running') showToast('Bot started successfully', 'success');
             else if (s.status === 'stopped' && lastStatus === 'running') showToast('Bot stopped', 'info');
@@ -75,75 +74,104 @@ function updateStatusUI(s) {
     const dotClass = s.status;
     const label = s.status.charAt(0).toUpperCase() + s.status.slice(1);
 
-    // Sidebar mini status
-    const sidebarDot = document.querySelector('#sidebarStatus .status-dot');
-    sidebarDot.className = `status-dot ${dotClass}`;
-    document.querySelector('#sidebarStatus .status-label').textContent = label;
-
-    // Dashboard stat cards
+    // Bot Status + Version
     document.getElementById('statStatus').innerHTML = `<span class="status-dot ${dotClass}"></span> ${label}`;
-    document.getElementById('statPlayer').textContent = s.current_player || '—';
-    document.getElementById('statTask').textContent = s.current_task || '—';
+    const versionEl = document.getElementById('statVersion');
+    if (versionEl) versionEl.textContent = `v${s.version || '0.0.0'}`;
 
-    // OCR status
+    // ADB Device Status
+    const adb = s.adb || {};
+    const adbEl = document.getElementById('statAdb');
+    const adbDetailEl = document.getElementById('statAdbDetail');
+    const adbWarning = document.getElementById('adbWarning');
+    const adbWarningText = document.getElementById('adbWarningText');
+
+    if (adb.connected) {
+        const devIds = (adb.devices || []).map(d => d.id).join(', ');
+        if (adbEl) adbEl.innerHTML = `<span class="status-dot running"></span> Connected`;
+        if (adbDetailEl) adbDetailEl.textContent = devIds;
+        if (adbWarning) adbWarning.style.display = 'none';
+    } else {
+        const errMsg = adb.error || 'No device detected';
+        if (adbEl) adbEl.innerHTML = `<span class="status-dot error"></span> Disconnected`;
+        if (adbDetailEl) adbDetailEl.textContent = errMsg;
+        if (adbWarning) {
+            adbWarning.style.display = 'flex';
+            if (adbWarningText) adbWarningText.textContent = `⚠️ ${errMsg}. Connect a device via USB and ensure ADB debugging is enabled.`;
+        }
+    }
+
+    // OCR Engine Status + Module Versions
     const ocrStatus = s.ocr_status || 'stopped';
     const ocrLabel = ocrStatus.charAt(0).toUpperCase() + ocrStatus.slice(1);
-    const ocrEl = document.getElementById('statOcr');
-    if (ocrEl) {
-        ocrEl.innerHTML = `<span class="status-dot ${ocrStatus}"></span> ${ocrLabel}
-            <button class="btn-xs btn-primary" id="btnStartOcr" style="margin-left:8px" onclick="startOcr()" ${ocrStatus !== 'stopped' ? 'disabled' : ''}>Start</button>
-            <button class="btn-xs btn-danger" id="btnStopOcr" style="margin-left:4px" onclick="stopOcr()" ${ocrStatus !== 'running' ? 'disabled' : ''}>Stop</button>`;
+    document.getElementById('statOcr').innerHTML = `
+        <span class="status-dot ${ocrStatus}"></span> ${ocrLabel}
+        <button class="btn-xs btn-primary" onclick="startOcr()" ${ocrStatus !== 'stopped' ? 'disabled' : ''} style="margin-left:8px">Start</button>
+        <button class="btn-xs btn-danger" onclick="stopOcr()" ${ocrStatus !== 'running' ? 'disabled' : ''} style="margin-left:4px">Stop</button>`;
+
+    const ocrModulesEl = document.getElementById('statOcrModules');
+    if (ocrModulesEl && s.ocr_modules) {
+        const mods = s.ocr_modules;
+        const parts = [];
+        if (mods.paddleocr) parts.push(`PaddleOCR ${mods.paddleocr}`);
+        if (mods.paddlepaddle) parts.push(`Paddle ${mods.paddlepaddle}`);
+        if (mods.opencv) parts.push(`OpenCV ${mods.opencv}`);
+        if (mods.rapidfuzz) parts.push(`RapidFuzz ${mods.rapidfuzz}`);
+        ocrModulesEl.textContent = parts.join(' · ') || '—';
     }
+
+    // Total Accounts + Characters
+    const accountsEl = document.getElementById('statAccounts');
+    const charsEl = document.getElementById('statCharacters');
+    if (accountsEl) accountsEl.textContent = s.total_accounts ?? 0;
+    if (charsEl) charsEl.textContent = `${s.total_characters ?? 0} characters`;
+
+    // Update log panel status dots
+    const botDot = s.status === 'running' ? 'running' : (s.status === 'starting' ? 'starting' : 'stopped');
+    const ocrDot = ocrStatus === 'running' ? 'running' : (ocrStatus === 'starting' ? 'starting' : 'stopped');
+
+    ['dashBotDot', 'logBotDot'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.className = `status-dot ${botDot}`;
+    });
+    ['dashOcrDot', 'logOcrDot'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.className = `status-dot ${ocrDot}`;
+    });
 
     // Button states
     const isRunning = s.status === 'running' || s.status === 'starting';
     document.getElementById('btnStartBot').disabled = isRunning;
     document.getElementById('btnStopBot').disabled = !isRunning;
-    const modalStartBtn = document.getElementById('btnConfirmStart');
-    const taskStartBtn = document.getElementById('btnStartWithTasks');
-    if (modalStartBtn) modalStartBtn.disabled = isRunning;
-    if (taskStartBtn) taskStartBtn.disabled = isRunning;
 }
 
-// --- SSE Log Stream ---
-function connectLogStream() {
-    if (eventSource) eventSource.close();
-    eventSource = new EventSource(`${API}/api/logs/stream`);
-    eventSource.onmessage = (e) => {
+// --- Dual SSE Log Streams ---
+function connectBotLogStream() {
+    if (botEventSource) botEventSource.close();
+    botEventSource = new EventSource(`${API}/api/logs/stream`);
+    botEventSource.onmessage = (e) => {
         try {
             const data = JSON.parse(e.data);
-            appendLogLine(data.line);
+            appendBotLog(data.line);
         } catch (err) {
-            console.error('SSE parse error:', err);
+            console.error('Bot SSE parse error:', err);
         }
     };
-    eventSource.onerror = () => {
-        setTimeout(connectLogStream, 3000);
-    };
+    botEventSource.onerror = () => setTimeout(connectBotLogStream, 3000);
 }
 
-function appendLogLine(line) {
-    const cssClass = classifyLogLine(line);
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const html = `<div class="log-line ${cssClass}"><span style="opacity:0.4;margin-right:8px">${time}</span>${escapeHtml(line)}</div>`;
-
-    // Dashboard log
-    const dashLog = document.getElementById('dashLogLines');
-    dashLog.insertAdjacentHTML('beforeend', html);
-    trimLog(dashLog, 200);
-
-    // Full log
-    const fullLog = document.getElementById('fullLogLines');
-    fullLog.insertAdjacentHTML('beforeend', html);
-    trimLog(fullLog, 1000);
-
-    // Auto-scroll
-    if (document.getElementById('autoScrollToggle').checked) {
-        const container = document.getElementById('fullLogContainer');
-        container.scrollTop = container.scrollHeight;
-    }
-    const dashContainer = document.getElementById('dashLogContainer');
-    dashContainer.scrollTop = dashContainer.scrollHeight;
+function connectOcrLogStream() {
+    if (ocrEventSource) ocrEventSource.close();
+    ocrEventSource = new EventSource(`${API}/api/ocr/logs/stream`);
+    ocrEventSource.onmessage = (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            appendOcrLog(data.line);
+        } catch (err) {
+            console.error('OCR SSE parse error:', err);
+        }
+    };
+    ocrEventSource.onerror = () => setTimeout(connectOcrLogStream, 3000);
 }
 
 function classifyLogLine(line) {
@@ -158,24 +186,95 @@ function classifyLogLine(line) {
     return '';
 }
 
+function formatLogHtml(line) {
+    const cssClass = classifyLogLine(line);
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return `<div class="log-line ${cssClass}"><span style="opacity:0.4;margin-right:8px">${time}</span>${escapeHtml(line)}</div>`;
+}
+
 function trimLog(container, maxLines) {
     while (container.children.length > maxLines) {
         container.removeChild(container.firstChild);
     }
 }
 
+function shouldAutoScroll() {
+    return document.getElementById('autoScrollToggle').checked;
+}
+
+function appendBotLog(line) {
+    const html = formatLogHtml(line);
+
+    // Full bot log panel
+    const botLog = document.getElementById('botLogContainer');
+    botLog.insertAdjacentHTML('beforeend', html);
+    trimLog(botLog, 1000);
+    if (shouldAutoScroll()) botLog.scrollTop = botLog.scrollHeight;
+
+    // Dashboard preview
+    const dashBot = document.getElementById('dashBotLog');
+    dashBot.insertAdjacentHTML('beforeend', html);
+    trimLog(dashBot, 50);
+    dashBot.scrollTop = dashBot.scrollHeight;
+}
+
+function appendOcrLog(line) {
+    const html = formatLogHtml(line);
+
+    // Full OCR log panel
+    const ocrLog = document.getElementById('ocrLogContainer');
+    ocrLog.insertAdjacentHTML('beforeend', html);
+    trimLog(ocrLog, 1000);
+    if (shouldAutoScroll()) ocrLog.scrollTop = ocrLog.scrollHeight;
+
+    // Dashboard preview
+    const dashOcr = document.getElementById('dashOcrLog');
+    dashOcr.insertAdjacentHTML('beforeend', html);
+    trimLog(dashOcr, 50);
+    dashOcr.scrollTop = dashOcr.scrollHeight;
+}
+
 function clearLogView() {
-    document.getElementById('dashLogLines').innerHTML = '';
-    document.getElementById('fullLogLines').innerHTML = '';
+    clearBotLog();
+    clearOcrLog();
     showToast('Logs cleared', 'info');
+}
+
+function clearBotLog() {
+    document.getElementById('botLogContainer').innerHTML = '';
+    document.getElementById('dashBotLog').innerHTML = '';
+}
+
+function clearOcrLog() {
+    document.getElementById('ocrLogContainer').innerHTML = '';
+    document.getElementById('dashOcrLog').innerHTML = '';
+}
+
+// --- OCR Controls ---
+async function startOcr() {
+    try {
+        await api('/api/ocr/start', { method: 'POST' });
+        showToast('Starting OCR server...', 'info');
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+async function stopOcr() {
+    try {
+        await api('/api/ocr/stop', { method: 'POST' });
+        showToast('Stopping OCR server...', 'info');
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
 }
 
 // --- Tasks ---
 async function loadTasks() {
     try {
-        const tasks = await api('/api/tasks');
-        window._tasks = tasks;
-        return tasks;
+        _tasks = await api('/api/tasks');
+        window._tasks = _tasks;
+        return _tasks;
     } catch (e) {
         console.error('Failed to load tasks:', e);
         showToast('Failed to load tasks', 'error');
@@ -184,7 +283,7 @@ async function loadTasks() {
 }
 
 function renderTaskGrid() {
-    const tasks = window._tasks || [];
+    const tasks = _tasks || [];
     const grid = document.getElementById('taskGrid');
     const modalGrid = document.getElementById('modalTaskGrid');
 
@@ -213,36 +312,33 @@ function toggleTask(key) {
     renderTaskGrid();
 }
 
-document.getElementById('btnSelectAll').addEventListener('click', () => {
-    (window._tasks || []).forEach(t => selectedTasks.add(t.key));
+function selectAllTasks() {
+    (_tasks || []).forEach(t => selectedTasks.add(t.key));
     renderTaskGrid();
     showToast(`Selected all ${selectedTasks.size} tasks`, 'info');
-});
+}
 
-document.getElementById('btnDeselectAll').addEventListener('click', () => {
+function deselectAllTasks() {
     selectedTasks.clear();
     renderTaskGrid();
     showToast('Cleared selection', 'info');
-});
+}
+
+document.getElementById('btnSelectAll').addEventListener('click', selectAllTasks);
+document.getElementById('btnDeselectAll').addEventListener('click', deselectAllTasks);
 
 // --- Bot Control ---
 document.getElementById('btnStartBot').addEventListener('click', openTaskModal);
 
 document.getElementById('btnStartWithTasks').addEventListener('click', async () => {
-    if (selectedTasks.size === 0) {
-        showToast('Select at least one task first', 'error');
-        return;
-    }
-    await startBot([...selectedTasks]);
+    const tasks = selectedTasks.size > 0 ? [...selectedTasks] : _tasks.map(t => t.key);
+    await startBot(tasks);
 });
 
 document.getElementById('btnConfirmStart').addEventListener('click', async () => {
-    if (selectedTasks.size === 0) {
-        showToast('Select at least one task', 'error');
-        return;
-    }
+    const tasks = selectedTasks.size > 0 ? [...selectedTasks] : _tasks.map(t => t.key);
     closeTaskModal();
-    await startBot([...selectedTasks]);
+    await startBot(tasks);
 });
 
 document.getElementById('btnStopBot').addEventListener('click', async () => {
@@ -260,7 +356,6 @@ async function startBot(tasks) {
         const allEmails = _accountsCache.map(a => a.email);
         const isAllAccounts = allEmails.length > 0 && allEmails.every(e => selectedAccountEmails.has(e));
 
-        // Check if all characters are selected across all accounts
         let isAllChars = true;
         for (const a of _accountsCache) {
             const charSet = selectedCharacters[a.email];
@@ -270,12 +365,10 @@ async function startBot(tasks) {
             }
         }
 
-        // Send account filter if not all accounts selected
         if (!isAllAccounts && selectedAccountEmails.size > 0) {
             payload.accounts = [...selectedAccountEmails];
         }
 
-        // Build characters dict only if some characters are deselected
         if (!isAllChars && selectedAccountEmails.size > 0) {
             const charsDict = {};
             for (const email of selectedAccountEmails) {
@@ -296,6 +389,7 @@ async function startBot(tasks) {
         const accMsg = payload.accounts ? ` (${payload.accounts.length} accounts)` : ' (all accounts)';
         const charMsg = payload.characters ? ' + character filter' : '';
         showToast(`Bot started with ${tasks.length} tasks${accMsg}${charMsg}`, 'success');
+        // Switch to dashboard view
         document.querySelector('[data-view="dashboard"]').click();
     } catch (e) {
         showToast(e.message, 'error');
@@ -341,7 +435,6 @@ function renderAccountSelector() {
 function toggleAccount(email, checked) {
     if (checked) {
         selectedAccountEmails.add(email);
-        // Select all characters for this account
         const acc = _accountsCache.find(a => a.email === email);
         if (acc) {
             selectedCharacters[email] = new Set(acc.players.map(p => String(p.id)));
@@ -361,7 +454,6 @@ function toggleCharacter(email, playerId, checked) {
         selectedAccountEmails.add(email);
     } else {
         selectedCharacters[email].delete(String(playerId));
-        // If no chars left for this account, deselect the account too
         if (selectedCharacters[email].size === 0) {
             selectedAccountEmails.delete(email);
             delete selectedCharacters[email];
@@ -375,7 +467,6 @@ function toggleAllAccounts() {
     const allChecked = document.getElementById('selectAllAccounts').checked;
     selectedAccountEmails.clear();
     selectedCharacters = {};
-
     if (allChecked) {
         _accountsCache.forEach(a => {
             selectedAccountEmails.add(a.email);
@@ -394,7 +485,6 @@ function updateSelectAllAccountsCheckbox() {
 // --- Modal ---
 async function openTaskModal() {
     renderTaskGrid();
-    // Refresh accounts cache and initialize selector state
     try {
         _accountsCache = await api('/api/accounts');
     } catch (e) {
@@ -416,14 +506,15 @@ function closeTaskModal() {
     document.getElementById('taskModal').classList.remove('open');
 }
 
-// Close modal on overlay click
 document.getElementById('taskModal').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeTaskModal();
 });
 
-// Close modal on Escape
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeTaskModal();
+    if (e.key === 'Escape') {
+        closeTaskModal();
+        closeAccountEditModal();
+    }
 });
 
 // --- Accounts ---
@@ -438,7 +529,7 @@ async function refreshAccounts() {
     }
 }
 
-let _editingAccountEmail = null;  // tracks which account is being edited
+let _editingAccountEmail = null;
 
 function renderAccounts(accounts) {
     const list = document.getElementById('accountsList');
@@ -486,7 +577,7 @@ async function openAccountEditModal(email) {
         _editingAccountEmail = email;
         document.getElementById('accountEditTitle').textContent = 'Edit Account';
         document.getElementById('editEmail').value = email;
-        document.getElementById('editEmail').disabled = true;  // can't rename email
+        document.getElementById('editEmail').disabled = true;
         document.getElementById('editPriority').value = acc.priority;
         document.getElementById('btnDeleteAccount').style.display = '';
 
@@ -537,14 +628,12 @@ async function saveAccountEdit() {
 
     try {
         if (_editingAccountEmail) {
-            // Update existing account
             await api(`/api/accounts/${encodeURIComponent(_editingAccountEmail)}`, {
                 method: 'PUT',
                 body: JSON.stringify({ email, priority, players }),
             });
             showToast('Account updated', 'success');
         } else {
-            // Create new account
             await api('/api/accounts', {
                 method: 'POST',
                 body: JSON.stringify({ email, priority, players }),
@@ -571,7 +660,6 @@ async function deleteEditingAccount() {
     }
 }
 
-// Close account edit modal on overlay click
 document.getElementById('accountEditModal').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeAccountEditModal();
 });
@@ -596,8 +684,8 @@ function renderCompletion(records) {
         <tr>
             <td style="font-weight:700;color:var(--text)">${escapeHtml(r.player_name)}</td>
             <td>${escapeHtml(r.email)}</td>
-            <td style="font-family:var(--mono);font-size:12px">${r.last_completed}</td>
-            <td style="font-family:var(--mono);font-size:12px">${formatDuration(r.hours_ago)}</td>
+            <td style="font-family:var(--font-mono);font-size:12px">${r.last_completed}</td>
+            <td style="font-family:var(--font-mono);font-size:12px">${formatDuration(r.hours_ago)}</td>
             <td><span class="badge ${r.in_cooldown ? 'badge-cooldown' : 'badge-ready'}">${r.in_cooldown ? '⏳ Cooldown' : '✓ Ready'}</span></td>
         </tr>
     `).join('');
@@ -617,13 +705,38 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+// --- Settings ---
+async function loadSettings() {
+    try {
+        const s = await api('/api/settings');
+        document.getElementById('settingCaptureTool').value = s.ocr_capture_tool || 'adb';
+    } catch (e) {
+        console.error('Failed to load settings:', e);
+    }
+}
+
+async function saveSettings() {
+    try {
+        const payload = {
+            ocr_capture_tool: document.getElementById('settingCaptureTool').value,
+        };
+        await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
+        showToast('Settings saved', 'success');
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+document.getElementById('btnSaveSettings').addEventListener('click', saveSettings);
+
 // --- Init ---
 async function init() {
     await loadTasks();
     await pollStatus();
     await refreshAccounts();
     await refreshCompletion();
-    connectLogStream();
+    connectBotLogStream();
+    connectOcrLogStream();
     statusInterval = setInterval(pollStatus, 3000);
 }
 

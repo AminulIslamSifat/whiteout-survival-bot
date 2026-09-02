@@ -1,5 +1,8 @@
 import time
 from core.core import req_text, tap_on_text, tap_on_template
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class GameFSM:
     def __init__(self):
@@ -70,7 +73,7 @@ class GameFSM:
 
     def detect_state(self):
         """Tries to identify the current screen by checking titles/buttons."""
-        print("Detecting current state...")
+        logger.info("Detecting current state...")
         
         # Check World vs City first as it's the most common
         res = req_text("World.City")
@@ -91,7 +94,7 @@ class GameFSM:
                 self.current_state = state
                 return state
         
-        print("Could not detect state automatically.")
+        logger.warning("Could not detect state automatically.")
         return None
 
     def find_path(self, start, end):
@@ -124,19 +127,19 @@ class GameFSM:
             self.current_state = "main_city"
 
         if self.current_state == target_state:
-            print(f"Already at {target_state}")
+            logger.info("Already at %s", target_state)
             return True
 
         path = self.find_path(self.current_state, target_state)
         if not path:
-            print(f"Path not found from {self.current_state} to {target_state}. Resetting to main_city...")
+            logger.warning("Path not found from %s to %s. Resetting to main_city...", self.current_state, target_state)
             from core.recalibrate import recalibrate
             recalibrate()
             self.current_state = "main_city"
             path = self.find_path("main_city", target_state)
             if not path: return False
 
-        print(f"Navigating: {' -> '.join(path)}")
+        logger.info("Navigating: %s", ' -> '.join(path))
         
         for i in range(len(path) - 1):
             from_node = path[i]
@@ -157,7 +160,7 @@ class GameFSM:
                 success = True
             
             if not success:
-                print(f"Failed to move from {from_node} to {to_node}. Retrying detection...")
+                logger.warning("Failed to move from %s to %s. Retrying detection...", from_node, to_node)
                 self.detect_state()
                 return self.navigate_to(target_state) # Recursive retry
 

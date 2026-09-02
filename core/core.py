@@ -12,6 +12,9 @@ from rapidfuzz import fuzz
 from cmd_program.screen_action import tap_screen, take_screenshot, long_press, _get_screen_size
 from concurrent.futures import ThreadPoolExecutor
 from core.coord_utils import box_percent_to_pixel, box_pixel_to_percent, round_percentages, set_base_resolution
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 
@@ -49,10 +52,10 @@ def init_database():
                 if isinstance(data, dict):
                     text_area.update(data)
                 else:
-                    print(f"Skipped non-dict file: {file}")
+                    logger.warning("Skipped non-dict file: %s", file)
 
         except Exception as e:
-            print(f"Error in {file} - {e}")
+            logger.error("Error in %s - %s", file, e)
     
     # Load device-specific calibration (overrides defaults)
     _load_device_specific_calibration()
@@ -77,7 +80,7 @@ def _load_device_specific_calibration():
         if not files:
             return  # No calibration files
         
-        print(f"\n📱 Loading device-specific calibration for {device_id}...")
+        logger.info("📱 Loading device-specific calibration for %s...", device_id)
         
         for file in files:
             try:
@@ -87,14 +90,14 @@ def _load_device_specific_calibration():
                         old_count = len(text_area)
                         text_area.update(data)
                         new_items = len(text_area) - old_count
-                        print(f"   ✅ {file.name}: +{new_items} items")
+                        logger.info("   ✅ %s: +%d items", file.name, new_items)
             except Exception as e:
-                print(f"   ⚠️ Error loading {file.name}: {e}")
+                logger.warning("   ⚠️ Error loading %s: %s", file.name, e)
         
-        print(f"   📊 Total text areas: {len(text_area)}\n")
+        logger.info("   📊 Total text areas: %d", len(text_area))
         
     except Exception as e:
-        print(f"   ⚠️ Could not load device calibration: {e}")
+        logger.warning("   ⚠️ Could not load device calibration: %s", e)
 
 
 def sync_resolution_with_device():
@@ -105,9 +108,9 @@ def sync_resolution_with_device():
     try:
         width, height = _get_screen_size()
         set_base_resolution(width, height)
-        print(f"✅ Coordinate system synchronized: {width}×{height}")
+        logger.info("✅ Coordinate system synchronized: %d×%d", width, height)
     except Exception as e:
-        print(f"⚠️ Could not sync device resolution: {e}")
+        logger.warning("⚠️ Could not sync device resolution: %s", e)
 
 
 def reload_device_calibration():
@@ -117,7 +120,7 @@ def reload_device_calibration():
     """
     global text_area
     
-    print("\n🔄 Reloading calibration...")
+    logger.info("🔄 Reloading calibration...")
     text_area.clear()
     init_database()
 
@@ -194,14 +197,14 @@ def _post_json_with_replay(url, payload, request_name, wait_sec=OCR_REPLAY_WAIT_
 
             # OCR service reachable but still reports failure (e.g., restarting/recycling).
             err = data.get("error") if isinstance(data, dict) else "non-dict response"
-            print(f"{request_name} attempt {attempt} returned failure: {err}")
+            logger.warning("%s attempt %d returned failure: %s", request_name, attempt, err)
 
         except (requests.RequestException, ValueError) as e:
-            print(f"{request_name} attempt {attempt} failed: {e}")
+            logger.error("%s attempt %d failed: %s", request_name, attempt, e)
 
         elapsed = time.time() - start
         if elapsed >= wait_sec:
-            print(f"{request_name} replay timed out after {elapsed:.1f}s")
+            logger.error("%s replay timed out after %.1fs", request_name, elapsed)
             return None
 
         time.sleep(backoff)
@@ -266,7 +269,7 @@ def req_cache_clear(session_id):
     try:
         requests.post(cache_clearing_url, json=payload, timeout=OCR_HTTP_TIMEOUT_SEC)
     except requests.RequestException as e:
-        print(f"Cache clear skipped (OCR unavailable): {e}")
+        logger.warning("Cache clear skipped (OCR unavailable): %s", e)
 
 
 def tap_on_template(
@@ -308,11 +311,11 @@ def tap_on_template(
         if coord and hold:
             # Pass coord=True since coordinates are already in pixels
             long_press(coord, duration=hold, coord=True)
-            print(f"long pressed on - {name} for {hold}ms")
+            logger.debug("long pressed on - %s for %dms", name, hold)
         elif coord and tap:
             # Pass coord=True since coordinates are already in pixels
             tap_screen(coord, coord=True)
-            print(f"pressed on - {name}")
+            logger.debug("pressed on - %s", name)
             if sleep:
                 time.sleep(sleep)
 
@@ -344,7 +347,7 @@ def tap_on_template(
         if try_match():
             return True
         else:
-            print(f"No match found for - {name}")
+            logger.debug("No match found for - %s", name)
         time.sleep(1)
 
     return None
@@ -391,7 +394,7 @@ def tap_on_text(
         if isinstance(box, list) and len(box) == 4 and all(isinstance(v, (int, float)) for v in box):
             return [box]  # ✅
 
-        print("Invalid ROI format:", box)
+        logger.warning("Invalid ROI format: %s", box)
         return None
     
 
@@ -442,7 +445,7 @@ def tap_on_text(
                 elif coord and tap:
                     # Coordinates are in pixels
                     tap_screen(coord, coord=True)
-                    print(f"Pressed on {target_text}, Skipped OCR")
+                    logger.debug("Pressed on %s, Skipped OCR", target_text)
                 if sleep:
                     time.sleep(sleep)
                 return True
@@ -451,7 +454,7 @@ def tap_on_text(
             res = req_ocr(img_path, save_result, rois=box, name=name, expected_text=target_text)
 
             if res is None:
-                print("OCR failed")
+                logger.warning("OCR failed")
                 continue
 
             found = False
@@ -473,7 +476,7 @@ def tap_on_text(
                     elif coord and tap:
                         # Coordinates are in pixels
                         tap_screen(coord, coord=True)
-                        print(f"Pressed on {item['text']}")
+                        logger.debug("Pressed on %s", item['text'])
 
                     if sleep:
                         time.sleep(sleep)
@@ -504,7 +507,7 @@ def tap_on_text(
                     elif coord and tap:
                         # Coordinates are in pixels
                         tap_screen(coord, coord=True)
-                        print(f"Pressed on {best_match['text']}")
+                        logger.debug("Pressed on %s", best_match['text'])
 
                     if sleep:
                         time.sleep(sleep)
@@ -537,7 +540,7 @@ def tap_on_text(
                                         long_press(coord, duration=hold, coord=True)
                                     elif coord and tap:
                                         tap_screen(coord, coord=True)
-                                        print(f"Pressed on {item['text']}")
+                                        logger.debug("Pressed on %s", item['text'])
                                     if sleep:
                                         time.sleep(sleep)
                                     return True
@@ -561,7 +564,7 @@ def tap_on_text(
                                         long_press(coord, duration=hold, coord=True)
                                     elif coord and tap:
                                         tap_screen(coord, coord=True)
-                                        print(f"Pressed on {best_match2['text']}")
+                                        logger.debug("Pressed on %s", best_match2['text'])
                                     if sleep:
                                         time.sleep(sleep)
                                     return True
@@ -575,7 +578,7 @@ def tap_on_text(
     texts = load_config(text, rois=rois)
 
     if not texts:
-        print("No text to press on")
+        logger.warning("No text to press on")
         return None
 
     if wait:
@@ -589,7 +592,7 @@ def tap_on_text(
                 return True
             time.sleep(0.1)
 
-        print(f"No match found for the text - {texts[text]['text']}")
+        logger.warning("No match found for the text - %s", texts[text]['text'])
         return None
 
     for i in range(3):
@@ -599,7 +602,7 @@ def tap_on_text(
             return True
         time.sleep(1)
 
-    print(f"No match found for the text - {texts[text]["text"]}")
+    logger.warning("No match found for the text - %s", texts[text]["text"])
     return None
 
 
@@ -611,7 +614,7 @@ def req_text(names=None, img_path=None, rois=None, save_result=False, coord=None
     if not names:
         res = req_ocr(img_path, save_result, rois=rois, name="full_page")
         if res is None:
-            print("OCR failed")
+            logger.warning("OCR failed")
             return None
         texts = []
         for t in res:
@@ -657,13 +660,13 @@ def req_text(names=None, img_path=None, rois=None, save_result=False, coord=None
     boxes, title = load_config(names, rois)
 
     if not boxes:
-        print("No location found")
+        logger.warning("No location found")
         return None
     
     res = req_ocr(img_path, save_result, rois=boxes, name=title)
 
     if res is None:
-        print("OCR failed")
+        logger.warning("OCR failed")
         return None
 
     texts = []
@@ -732,7 +735,7 @@ def tap_on_templates_batch(
         if tap[i]:
             # Coordinates from template matching are in pixels
             tap_screen(coord_xy, coord=True)
-            print(f"Pressed on {names[i]}")
+            logger.debug("Pressed on %s", names[i])
             if sleep:
                 time.sleep(sleep)
         return True
@@ -858,29 +861,29 @@ def tap_on_closest_text(
                 tap_screen(target_center, coord=True)
                 if sleep:
                     time.sleep(sleep)
-                print(f"Distance: {distance(center(closest_target['box']), base_center)}")
+                logger.debug("Distance: %.2f", distance(center(closest_target['box']), base_center))
                 return True
             else:
                 return None
         except Exception as e:
-            print(f"Reading Error - {e}")
+            logger.error("Reading Error - %s", e)
             return None
         
     if wait:
         start = time.time()
         while((time.time() - start) < wait):
             if try_match():
-                print(f"Pressed on closent {target_text} of {base_text}")
+                logger.debug("Pressed on closest %s of %s", target_text, base_text)
                 return True
-        print("No match found")
+        logger.warning("No match found")
         return False
             
     for _ in range(3):
         if try_match():
-            print(f"Pressed on closent {target_text} of {base_text}")
+            logger.debug("Pressed on closest %s of %s", target_text, base_text)
             return True
         else:
-            print("No match found")
+            logger.warning("No match found")
         time.sleep(1)
 
     return False

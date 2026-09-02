@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import signal
+import httpx
 import subprocess
 import sys
 import time
@@ -21,11 +22,24 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+# Logging setup for dashboard server
+import logging as _logging
+_logging.getLogger("ppocr").setLevel(_logging.ERROR)
+_logging.getLogger("uvicorn").setLevel(_logging.WARNING)
+_logging.getLogger("uvicorn.access").setLevel(_logging.ERROR)
+
+logger = _logging.getLogger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DB_DIR = PROJECT_ROOT / "db"
 ACCOUNT_FILE = DB_DIR / "account.json"
 COMPLETION_LOG = DB_DIR / "completion_log.txt"
+SETTINGS_FILE = DB_DIR / "settings.json"
+
+DEFAULT_SETTINGS = {
+    "ocr_capture_tool": "adb",
+}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,7 +48,7 @@ async def lifespan(app: FastAPI):
     # Shutdown: terminate any running subprocesses
     for proc, label in [(_bot_process, "Bot"), (_ocr_process, "OCR")]:
         if proc and proc.poll() is None:
-            print(f"[Shutdown] Terminating {label} process (PID {proc.pid})")
+            logger.info("[Shutdown] Terminating %s process (PID %d)", label, proc.pid)
             proc.terminate()
             try:
                 proc.wait(timeout=3)
@@ -53,10 +67,12 @@ async def lifespan(app: FastAPI):
             pass
     _log_listeners.clear()
     _ocr_log_listeners.clear()
-    print("[Shutdown] Cleanup complete.")
+    logger.info("[Shutdown] Cleanup complete.")
 
 
-app = FastAPI(title="WOS-Bot Dashboard", version="0.2.0", lifespan=lifespan)
+APP_VERSION = "0.2.0"
+
+app = FastAPI(title="WOS-Bot Dashboard", version=APP_VERSION, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -238,8 +254,70 @@ async def _read_bot_stream(process: subprocess.Popen):
 
 # --- API Routes ---
 
+def _get_adb_devices() -> dict:
+    """Check ADB device connectivity."""
+    try:
+        result = subprocess.run(
+            ["adb", "devices"],
+            capture_output=True, text=True, timeout=5,
+        )
+        lines = result.stdout.strip().split("\n")[1:]
+        devices = []
+        for line in lines:
+            if line.strip():
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] == "device":
+                    devices.append({"id": parts[0], "state": "connected"})
+                elif len(parts) >= 2:
+                    devices.append({"id": parts[0], "state": parts[1]})
+        return {"connected": len(devices) > 0, "devices": devices}
+    except FileNotFoundError:
+        return {"connected": False, "devices": [], "error": "ADB not found"}
+    except subprocess.TimeoutExpired:
+        return {"connected": False, "devices": [], "error": "ADB timeout"}
+    except Exception as e:
+        return {"connected": False, "devices": [], "error": str(e)}
+
+
+def _get_ocr_module_versions() -> dict:
+    """Get OCR-related module versions."""
+    info = {}
+    try:
+        import paddleocr
+        info["paddleocr"] = getattr(paddleocr, "__version__", "unknown")
+    except ImportError:
+        info["paddleocr"] = "not installed"
+    try:
+        import paddle
+        info["paddlepaddle"] = getattr(paddle, "__version__", "unknown")
+    except ImportError:
+        info["paddlepaddle"] = "not installed"
+    try:
+        import cv2
+        info["opencv"] = cv2.__version__
+    except ImportError:
+        info["opencv"] = "not installed"
+    try:
+        import rapidfuzz
+        info["rapidfuzz"] = getattr(rapidfuzz, "__version__", "unknown")
+    except ImportError:
+        info["rapidfuzz"] = "not installed"
+    return info
+
+
+def _get_total_characters() -> int:
+    """Count total characters across all accounts."""
+    data = _load_accounts()
+    total = 0
+    for acc in data.values():
+        players = acc.get("player", [])
+        total += len(players)
+    return total
+
+
 @app.get("/api/status")
 async def get_status():
+    adb_info = _get_adb_devices()
     return {
         "status": _bot_status,
         "current_player": _current_player,
@@ -248,6 +326,11 @@ async def get_status():
         "selected_accounts": _selected_accounts,
         "ocr_status": _ocr_status,
         "uptime": time.time() if _bot_status == "running" else None,
+        "version": APP_VERSION,
+        "adb": adb_info,
+        "ocr_modules": _get_ocr_module_versions(),
+        "total_accounts": len(_load_accounts()),
+        "total_characters": _get_total_characters(),
     }
 
 
@@ -270,6 +353,31 @@ async def start_bot(selection: TaskSelection):
     _selected_accounts = selection.accounts or []
     _log_lines.clear()
     _bot_status = "starting"
+
+    # Auto-start OCR server if not running
+    if _ocr_status not in ("running", "starting"):
+        try:
+            _start_ocr_process()
+            await _broadcast_log("[Dashboard] Auto-started OCR server.")
+        except Exception as e:
+            await _broadcast_log(f"[Dashboard] ⚠️ OCR auto-start failed: {e}")
+
+    # Wait for OCR server to be ready before starting bot
+    ocr_ready = False
+    for attempt in range(60):  # up to 60 seconds
+        try:
+            async with httpx.AsyncClient(timeout=2) as client:
+                resp = await client.get("http://127.0.0.1:8000/health")
+                if resp.status_code == 200:
+                    ocr_ready = True
+                    break
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+    if ocr_ready:
+        await _broadcast_log("[Dashboard] ✅ OCR server is ready.")
+    else:
+        await _broadcast_log("[Dashboard] ⚠️ OCR server not ready after 60s, bot may fail OCR requests.")
 
     # Send task keys + optional account/character filter as JSON via stdin
     payload: dict = {"tasks": selection.tasks}
@@ -457,26 +565,32 @@ async def ocr_status():
     return {"status": _ocr_status}
 
 
-@app.post("/api/ocr/start")
-async def ocr_start():
+def _start_ocr_process():
+    """Internal helper to launch OCR subprocess. Raises on failure."""
     global _ocr_process, _ocr_status, _ocr_log_lines
 
     if _ocr_status in ("running", "starting"):
-        raise HTTPException(400, "OCR server is already running")
+        return  # already running
 
     _ocr_log_lines.clear()
     _ocr_status = "starting"
 
+    _ocr_process = subprocess.Popen(
+        [sys.executable, str(PROJECT_ROOT / "core" / "ocr.py")],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        cwd=str(PROJECT_ROOT),
+        env={**os.environ, "PYTHONUNBUFFERED": "1", "OCR_CAPTURE_TOOL": _load_settings().get("ocr_capture_tool", "adb")},
+    )
+    _ocr_status = "running"
+    asyncio.create_task(_read_ocr_stream(_ocr_process))
+
+
+@app.post("/api/ocr/start")
+async def ocr_start():
     try:
-        _ocr_process = subprocess.Popen(
-            [sys.executable, str(PROJECT_ROOT / "core" / "ocr.py")],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            cwd=str(PROJECT_ROOT),
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
-        )
-        _ocr_status = "running"
-        asyncio.create_task(_read_ocr_stream(_ocr_process))
+        _start_ocr_process()
         return {"status": "started"}
     except Exception as e:
         _ocr_status = "error"
@@ -629,6 +743,43 @@ async def delete_account(email: str):
     del data[email]
     _save_accounts(data)
     return {"status": "deleted", "email": email}
+
+
+# --- Settings ---
+def _load_settings() -> dict:
+    if not SETTINGS_FILE.exists():
+        return {**DEFAULT_SETTINGS}
+    with open(SETTINGS_FILE) as f:
+        data = json.load(f)
+    # Merge with defaults for any missing keys
+    merged = {**DEFAULT_SETTINGS}
+    merged.update(data)
+    return merged
+
+
+def _save_settings(data: dict):
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+class SettingsUpdate(BaseModel):
+    ocr_capture_tool: Optional[str] = None
+
+
+@app.get("/api/settings")
+async def get_settings():
+    return _load_settings()
+
+
+@app.put("/api/settings")
+async def update_settings(update: SettingsUpdate):
+    data = _load_settings()
+    if update.ocr_capture_tool is not None:
+        if update.ocr_capture_tool not in ("adb", "scrcpy"):
+            raise HTTPException(400, "ocr_capture_tool must be 'adb' or 'scrcpy'")
+        data["ocr_capture_tool"] = update.ocr_capture_tool
+    _save_settings(data)
+    return {"status": "updated", "settings": data}
 
 
 # --- Static Files ---

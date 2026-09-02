@@ -1,5 +1,6 @@
 #coming soon
 import time
+from core.logging_config import get_logger
 from core.core import (
     tap_on_template,
     tap_on_text,
@@ -13,6 +14,8 @@ from cmd_program.screen_action import(
 from core.recalibrate import recalibrate
 from rapidfuzz import fuzz
 # use dynamic percentage taps; do not convert to pixels here
+
+logger = get_logger(__name__)
 
 
 
@@ -35,7 +38,7 @@ def change_account(next_email):
         swipe_screen(50.93, 73.17, 50.93, 16.26)
         status = tap_on_text(next_email, wait=10, threshold=1.0)
         if not status:
-            print("Email not found, Exiting...")
+            logger.error("Email not found, Exiting...")
             return None
     tap_on_text("ChiefProfile.Settings.Account.ChangeAccount.SignInWithGoogle.Continue", wait=20, sleep=2)
     recalibrate(timeout=80)
@@ -51,7 +54,7 @@ def change_character(next_name):
     time.sleep(1)
     text = req_text("ChiefProfile.Title")[0][0]
     if text.lower() != "chief profile":
-        print("Chief Profile not found, Exiting...")
+        logger.error("Chief Profile not found, Exiting...")
         return None
     tap_on_text("ChiefProfile.Settings", wait=1)
     tap_on_text("ChiefProfile.Settings.Characters", wait=2)
@@ -80,7 +83,7 @@ def change_character(next_name):
     threshold = 70  # corresponds to 0.7 similarity
     candidates = [(idx, score) for idx, score in players_match_value.items() if score >= threshold]
     if not candidates:
-        print("No matching player found with sufficient similarity, Exiting...")
+        logger.error("No matching player found with sufficient similarity, Exiting...")
         return None
 
     best_idx, best_score = max(candidates, key=lambda x: x[1])

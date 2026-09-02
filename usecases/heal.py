@@ -4,8 +4,10 @@ TASK_METADATA = [
 
 import time
 
-import time
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -30,7 +32,7 @@ def heal():
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Reading Error - {e}")
+        logger.warning("Reading Error - %s", e)
     if title != "city":
         recalibrate()
         tap_on_text("Home.World", wait=2)
@@ -43,5 +45,5 @@ def heal():
         tap_on_text("World.Heal.Help", wait=2)
         tap_on_text("World.City", wait=3)
     else:
-        print("No troops to heal, Continuing to the next task...")
+        logger.info("No troops to heal, Continuing to the next task...")
     return True

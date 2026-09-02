@@ -3,7 +3,11 @@ TASK_METADATA = [
 ]
 
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -43,7 +47,7 @@ def buy_vip_time(day=30):
     try:
         title = title[0][0]
     except Exception as e:
-        print(f"Error while reading page title - {e}, Continuing...")
+        logger.warning("Error while reading page title - %s, Continuing...", e)
     
     if title.lower != "vip":
         recalibrate()

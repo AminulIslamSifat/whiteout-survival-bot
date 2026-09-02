@@ -4,7 +4,11 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import time
 from rapidfuzz import fuzz
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 
 from core.core import (
@@ -79,5 +83,5 @@ while True:
     if match is None:
         continue
 
-    print(f"Matched {match['ocr_text']!r} -> {match['candidate']!r} ({match['score']:.2f})")
+    logger.info("Matched %r -> %r (%.2f)", match['ocr_text'], match['candidate'], match['score'])
     tap_screen(box_center(match["box"]), coord=True)

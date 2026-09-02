@@ -3,7 +3,11 @@ TASK_METADATA = [
 ]
 
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -49,7 +53,7 @@ def challenge_lowest_power():
             elif text.isdigit() and int(text) > 50000:
                 powers.append(int(text))
     except Exception as e:
-        print(f"Power Reading Error - {e}")
+        logger.warning("Power Reading Error - %s", e)
 
     if powers:
         lowest_power = min(powers) if len(powers) > 0 else 0
@@ -86,11 +90,11 @@ def find_arena():
 def arena():
     attempt = 0
     recalibrate()
-    print("Starting the fight in Arena of Glory...")
+    logger.info("Starting the fight in Arena of Glory...")
 
     availabe = find_arena()
     if not availabe:
-        print("Arena challenge is not availabe, Ending the task")
+        logger.info("Arena challenge is not available, Ending the task")
         return None
     tap_on_text("Home.Arena.Challenge", wait=2, sleep=1)
 
@@ -99,15 +103,15 @@ def arena():
     try:
         attempt = int(res[0]['text'].split(":")[1])
     except Exception as e:
-        print(f"Attempt Reading error -{e}")
+        logger.warning("Attempt Reading error - %s", e)
 
     while(attempt > 0):
         res = req_ocr(rois=[[27.78, 70.12, 61.57, 74.39]])
         try:
             attempt = int(res[0]['text'].split(":")[1]) - 1
-            print(f"Remaining Challenge {attempt}")
+            logger.info("Remaining Challenge %d", attempt)
         except Exception as e:
-            print(f"Attempt counting error -{e}")
+            logger.warning("Attempt counting error - %s", e)
 
         challenge_lowest_power()
 
@@ -122,7 +126,7 @@ def arena():
         else:
             tap_on_text("Home.Arena.Challenge.Challenge.Fight.End.TapAnywhereToExit", wait=5)
         
-    print("Finished the task - Arena Of Glory, Returning to homepage...")
+    logger.info("Finished the task - Arena Of Glory, Returning to homepage...")
     recalibrate()
 
 

@@ -3,7 +3,11 @@ TASK_METADATA = [
 ]
 
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -32,13 +36,13 @@ def train():
     status = tap_on_template("Global.SidePanel", wait=2, threshold=0.5)
 
     if not status:
-        print("Side Panel Not found")
+        logger.warning("Side Panel Not found")
         tap_screen(0.37, 44.84)
 
     status = tap_on_text("Infantry", rois=[side_panel], wait=2, sleep=1)
 
     if not status:
-        print("Error finding side panel, Exiting the task")
+        logger.error("Error finding side panel, Exiting the task")
         return None
     
     for _ in range(3):
@@ -56,7 +60,7 @@ def train():
         tap_screen(50, 48.78)
         status = tap_on_text("Home.TroopTraining.Train", wait=2)
     if not status:
-        print("Infantry Training is not finished yet, Skipping Infantry...")
+        logger.info("Infantry Training is not finished yet, Skipping Infantry...")
 
     tap_on_text("Home.TroopTraining.LancerCamp", wait=2, sleep=0.5)
     title = req_text("Home.TroopTraining.Title")
@@ -65,7 +69,7 @@ def train():
         tap_on_text("Click anywhere", wait=2, sleep=0.5)
     status = tap_on_text("Home.TroopTraining.Train", wait=2)
     if not status:
-        print("Lancer Training is not finished yet, Skipping Lancer...")
+        logger.info("Lancer Training is not finished yet, Skipping Lancer...")
 
     tap_on_text("Home.TroopTraining.MarksmanCamp", wait=2, sleep=0.5)
     title = req_text("Home.TroopTraining.Title")
@@ -74,7 +78,7 @@ def train():
         tap_on_text("Click anywhere", wait=2, sleep=0.5)
     status = tap_on_text("Home.TroopTraining.Train", wait=2)
     if not status:
-        print("Marksman Training is not finished yet, Skipping Marksman...")
+        logger.info("Marksman Training is not finished yet, Skipping Marksman...")
 
     return True
 
@@ -86,7 +90,7 @@ def train_infantry(Amount=None):
 
     status = tap_on_template("Global.SidePanel", wait=2, threshold=0.5)
     if not status:
-        print("Side Panel Not found, Exiting The Task")
+        logger.error("Side Panel Not found, Exiting The Task")
         return None
 
     tap_on_text("Infantry", rois=[side_panel], wait=2)
@@ -105,7 +109,7 @@ def train_infantry(Amount=None):
             training_amount = int(training_amount[0][0])
             trained += training_amount
         except Exception as e:
-            print(f"Training Amount can't be read, Only training for one time - {e}")
+            logger.warning("Training Amount can't be read, Only training for one time - %s", e)
             tap_on_text("Home.TroopTraining.Train", wait=2)
             break
 
@@ -125,7 +129,7 @@ def train_lancer(Amount=None):
 
     status = tap_on_template("Global.SidePanel", wait=2, threshold=0.5)
     if not status:
-        print("Side Panel Not found, Exiting The Task")
+        logger.error("Side Panel Not found, Exiting The Task")
         return None
 
     tap_on_text("Lancer", rois=[side_panel], wait=2)
@@ -144,7 +148,7 @@ def train_lancer(Amount=None):
             training_amount = int(training_amount[0][0])
             trained += training_amount
         except Exception as e:
-            print(f"Training Amount can't be read, Only training for one time - {e}")
+            logger.warning("Training Amount can't be read, Only training for one time - %s", e)
             tap_on_text("Home.TroopTraining.Train", wait=2)
             break
 
@@ -164,7 +168,7 @@ def train_marksman(Amount=None):
 
     status = tap_on_template("Global.SidePanel", wait=2, threshold=0.5)
     if not status:
-        print("Side Panel Not found, Exiting The Task")
+        logger.error("Side Panel Not found, Exiting The Task")
         return None
 
     tap_on_text("Marksman", rois=[side_panel], wait=2)
@@ -183,7 +187,7 @@ def train_marksman(Amount=None):
             training_amount = int(training_amount[0][0])
             trained += training_amount
         except Exception as e:
-            print(f"Training Amount can't be read, Only training for one time - {e}")
+            logger.warning("Training Amount can't be read, Only training for one time - %s", e)
             tap_on_text("Home.TroopTraining.Train", wait=2)
             break
 

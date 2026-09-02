@@ -7,6 +7,9 @@ import numpy as np
 
 from core.coord_utils import percent_to_pixel
 from cmd_program.resolution_utils import get_stream_resolution
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_adb_devices():
@@ -29,7 +32,7 @@ def get_adb_devices():
 
 devices = get_adb_devices()
 if not devices:
-    print("❌ No ADB devices found. Please connect your phone, babe. 💋")
+    logger.error("❌ No ADB devices found. Please connect your phone.")
     device_id = None
 elif "13139385O0003802" in devices:
     device_id = "13139385O0003802"
@@ -210,4 +213,4 @@ def input_text(text, device_id=None, backspace=6):
     clear_input(count=backspace, device_id=resolved_device_id)
     run_adb_command(adb_command, resolved_device_id)
     run_adb_command(["shell", "input", "keyevent", "66"], device_id=resolved_device_id)
-    print(f"Text Input: {text}")
+    logger.debug("Text Input: %s", text)

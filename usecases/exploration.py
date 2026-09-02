@@ -4,7 +4,11 @@ TASK_METADATA = [
 ]
 
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -41,7 +45,7 @@ def claim_exploration_idle_income():
 
 
 def continue_exploring(stopping_level=None):
-    print("Started Exploration...")
+    logger.info("Started Exploration...")
 
     def ensure_open_exploration():
         status = tap_on_text("Home.Exploration", wait=2)
@@ -67,12 +71,12 @@ def continue_exploring(stopping_level=None):
                 time.sleep(0.5)
                 level = int(req_text("Home.Exploration.CurrentLevel")[0][0])
             except Exception as e:
-                print(f"Level Reading Failed - {e}, Ending the task...")
+                logger.error("Level Reading Failed - %s, Ending the task...", e)
                 return
 
-            print(f"Current level - {level}, Will stop at {stopping_level}")
+            logger.info("Current level - %d, Will stop at %d", level, stopping_level)
             if level > stopping_level:
-                print("Exploration Completed...")
+                logger.info("Exploration Completed...")
                 break
 
         tap_on_text("Home.Exploration.Explore.Fight", wait=2)
@@ -81,10 +85,10 @@ def continue_exploring(stopping_level=None):
         if s:
             v = tap_on_text("Home.Exploration.Explore.Fight.Victory.Continue", wait=2)
             if v:
-                print("Challenging next stage...")
+                logger.info("Challenging next stage...")
             else:
                 v = tap_on_text("Home.Exploration.Explore.Fight.ReturnToCity", wait=2)
-                print("Failed the stage, Returning to the Homepage")
+                logger.warning("Failed the stage, Returning to the Homepage")
                 break
 
 

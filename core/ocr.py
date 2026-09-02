@@ -44,11 +44,15 @@ from cmd_program.screen_stream import start_screen_stream, setup_v4l2loopback
 from cmd_program.resolution_utils import get_stream_resolution, reset_resolution_cache
 import paddleocr
 
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 
 #Printing the version of paddleocr
-print(f"PaddleOCR Version: {paddleocr.__version__}")
-print(f"PaddlePaddle Version: {paddle.__version__}")
+logger.info("PaddleOCR Version: %s", paddleocr.__version__)
+logger.info("PaddlePaddle Version: %s", paddle.__version__)
 
 #Disabling logging from the paddleocr
 import logging
@@ -155,7 +159,7 @@ def _save_frame_to_cache(frame):
     save_path = cache_dir / f"frame_{int(time.time() * 1000)}.png"
     ok = cv2.imwrite(str(save_path), frame)
     if ok:
-        print(f"Saved frame to {save_path}")
+        logger.debug("Saved frame to %s", save_path)
 
 
 def _normalize_frame_resolution(frame):
@@ -223,7 +227,7 @@ def _try_start_stream():
             _stream_ready = True
             return True
         except Exception as e:
-            print(f"screen_stream start failed, falling back to adb: {e}")
+            logger.warning("screen_stream start failed, falling back to adb: %s", e)
             _stream_ready = False
             _stream_retry_after = now + STREAM_RETRY_COOLDOWN_S
             return False
@@ -264,9 +268,9 @@ def _enforce_ram_cap(context="runtime"):
         if rss_before <= RAM_CAP_BYTES:
             return
 
-        print(
-            f"RAM guard triggered in {context}: "
-            f"rss={rss_before / (1024**3):.2f}GB cap={RAM_CAP_GB:.2f}GB. Recycling OCR engine..."
+        logger.warning(
+            "RAM guard triggered in %s: rss=%.2fGB cap=%.2fGB. Recycling OCR engine...",
+            context, rss_before / (1024**3), RAM_CAP_GB,
         )
 
         _reinitialize_ocr_engine()
@@ -323,7 +327,7 @@ def _capture_frame(img_path=None, save_frame=False):
             if img is None:
                 raise RuntimeError("screen_stream returned no frame")
         except Exception as e:
-            print(f"screen_stream capture failed, using adb: {e}")
+            logger.warning("screen_stream capture failed, using adb: %s", e)
             with _stream_state_lock:
                 _stream_ready = False
                 _stream_retry_after = time.time() + STREAM_RETRY_COOLDOWN_S
@@ -356,7 +360,7 @@ def _call_ocr_with_recovery(image):
             # Paddle sometimes throws this when predictor state gets unstable.
             if "could not execute a primitive" not in str(e):
                 raise
-            print("OCR primitive execution failed. Reinitializing OCR engine and retrying once...")
+            logger.warning("OCR primitive execution failed. Reinitializing OCR engine and retrying once...")
             _reinitialize_ocr_engine()
             return ocr.ocr(image, cls=False)
 
@@ -408,7 +412,7 @@ def init_services():
     ocr = _build_ocr_engine()
 
     root_dir = Path(TEMPLATE_PATH)
-    print(root_dir)
+    logger.debug("root_dir: %s", root_dir)
     for file_path in root_dir.rglob("*.png"):
         if file_path.is_file():
             fn = os.path.splitext(file_path.name)[0]
@@ -687,14 +691,14 @@ def run_ocr(
         img = _capture_frame(img_path, save_frame=save_frame)
         capture_time_s = time.perf_counter() - capture_start
     except Exception as e:
-        print(f"Error - {e}")
+        logger.error("Error - %s", e)
 
     if img is None:
         return []
 
     all_results = []
     h, w = img.shape[:2]
-    print(f"Height: {h}, Width: {w}")
+    logger.debug("Height: %d, Width: %d", h, w)
     
     # Ensure debug directory exists if saving
     if save_result and not os.path.exists("test/debug"):
@@ -816,7 +820,7 @@ def ocr_endpoint(req:OCRRequest):
         start_time = time.perf_counter()
         results = run_ocr(req.img_path, req.save_result, req.rois, req.save_frame, req.name, req.expected_text)
         finish_time = time.perf_counter()
-        print(f"({finish_time-start_time}s)")
+        logger.debug("(%.3fs)", finish_time - start_time)
     except MemoryError as e:
         return {
             "success": False,
@@ -869,6 +873,11 @@ def template_matching(req:TemplateMatchRequest):
         "success" : True,
         "results" : results
     }
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "ocr_loaded": ocr is not None}
 
 
 @app.post("/clear_cache")

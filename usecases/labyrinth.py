@@ -3,7 +3,11 @@ TASK_METADATA = [
 ]
 
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -63,7 +67,7 @@ def labyrinth():
     if not status:
         status = go_to_labyrinth()
         if not status:
-            print("Labyrinth task is already completed, Exiting the task")
+            logger.info("Labyrinth task is already completed, Exiting the task")
             return None
     
     for lab in labyrinth_list:

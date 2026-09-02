@@ -19,12 +19,14 @@ if PROJECT_ROOT not in sys.path:
 from rich.console import Console
 from rich.panel import Panel
 
+from core.logging_config import get_logger
 from core.core import req_text
 from core.recalibrate import recalibrate
 from cmd_program.screen_action import tap_screen
 from core.change_player import change_account, change_character
 
 console = Console()
+logger = get_logger(__name__)
 COMPLETION_LOG_PATH = "db/completion_log.txt"
 SKIP_WINDOW_SECONDS = 3 * 60 * 60
 
@@ -52,7 +54,7 @@ def _discover_tasks():
         try:
             mod = importlib.import_module(module_name)
         except Exception as e:
-            print(f"⚠️ Could not import {module_name}: {e}")
+            logger.warning("Could not import %s: %s", module_name, e)
             continue
 
         metadata = getattr(mod, "TASK_METADATA", None)
@@ -64,7 +66,7 @@ def _discover_tasks():
             func_name = entry["func"]
             func = getattr(mod, func_name, None)
             if func is None:
-                print(f"⚠️ {module_name}.{func_name} not found, skipping {key}")
+                logger.warning("%s.%s not found, skipping %s", module_name, func_name, key)
                 continue
             task_map[key] = func
             task_list.append({
@@ -142,8 +144,8 @@ def init_database(
     if account_filter:
         filtered = {k: v for k, v in raw_data.items() if k in account_filter}
         if not filtered:
-            print(f"⚠️ No matching accounts found for filter: {account_filter}")
-            print(f"   Available: {', '.join(raw_data.keys())}")
+            logger.warning("No matching accounts found for filter: %s", account_filter)
+            logger.warning("   Available: %s", ', '.join(raw_data.keys()))
         raw_data = filtered
 
     # Apply character filter if provided
@@ -160,11 +162,11 @@ def init_database(
             raw_data[email]["player"] = filtered_players
             removed = len(original_players) - len(filtered_players)
             if removed > 0:
-                print(f"🎮 Filtered {removed} character(s) from {email}")
+                logger.info("🎮 Filtered %d character(s) from %s", removed, email)
         # Remove accounts with no remaining players
         empty_emails = [e for e, d in raw_data.items() if not d.get("player")]
         for e in empty_emails:
-            print(f"⚠️ Removing {e} — no characters left after filter")
+            logger.warning("Removing %s — no characters left after filter", e)
             del raw_data[e]
 
     sorted_player_data = sorted(
@@ -234,10 +236,10 @@ def player_initialization():
         page_title_res = req_text("ChiefProfile.Title")
         page_title = pick_best_text(page_title_res, expected="Chief Profile") or ""
         if fuzz.ratio(page_title.lower(), "chief profile".lower()) < 60:
-            print("Failed to load chief profile")
+            logger.error("Failed to load chief profile")
             return None
     except Exception as e:
-        print(f"Reading error - {e}, Ending the task")
+        logger.error("Reading error - %s, Ending the task", e)
         return None
 
     time.sleep(1)
@@ -292,7 +294,7 @@ def player_initialization():
                 current_email = email
 
     if current_player_id is None or current_email is None:
-        print("No player data found for this ID, Exiting this character...")
+        logger.error("No player data found for this ID, Exiting this character...")
         raise RuntimeError("Player Initialization Failed, Stopping the Bot...")
 
     current_player = Player(name, id_val, state, current_email)
@@ -324,9 +326,9 @@ def run_selected_tasks(current_player_id, selected_task_keys):
     for key in selected_task_keys:
         func = TASK_MAP.get(key)
         if func is None:
-            print(f"⚠️ Unknown task key: {key}")
+            logger.warning("Unknown task key: %s", key)
             continue
-        print(f"▶ Running task: {key}")
+        logger.info("▶ Running task: %s", key)
         try:
             # Some tasks accept player_id, some don't
             import inspect
@@ -336,7 +338,7 @@ def run_selected_tasks(current_player_id, selected_task_keys):
             else:
                 func()
         except Exception as e:
-            print(f"❌ Task {key} failed: {e}")
+            logger.error("Task %s failed: %s", key, e)
 
 
 def run_bot(selected_task_keys):
@@ -360,12 +362,12 @@ def run_bot(selected_task_keys):
                 if should_skip_player(current_player.id, completion_records):
                     last_ts = completion_records.get(active_id)
                     last_time = datetime.fromtimestamp(last_ts).strftime("%Y-%m-%d %H:%M:%S")
-                    print(f"Skipping {current_player.name} ({current_player.id}) - completed recently at {last_time}")
+                    logger.info("Skipping %s (%s) - completed recently at %s", current_player.name, current_player.id, last_time)
                 else:
-                    print(f"Running tasks for: {current_player.name} ({current_player.id})")
+                    logger.info("Running tasks for: %s (%s)", current_player.name, current_player.id)
                     run_selected_tasks(current_player.id, selected_task_keys)
                     mark_player_completed(current_player.id, completion_records)
-                    print(f"Marked completed: {current_player.id} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                    logger.info("Marked completed: %s at %s", current_player.id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 processed_ids.add(active_id)
 
             next_player = next(
@@ -376,7 +378,7 @@ def run_bot(selected_task_keys):
             if not next_player:
                 break
 
-            print(f"Switching to sibling character: {next_player['name']}")
+            logger.info("Switching to sibling character: %s", next_player['name'])
             change_character(next_player["name"])
             player_initialization()
 
@@ -385,7 +387,7 @@ def run_bot(selected_task_keys):
                     f"Unexpected email after character switch. Expected {current_email}, got {current_player.email}"
                 )
 
-        print(f"Progressing to the next email: {next_email}")
+        logger.info("Progressing to the next email: %s", next_email)
         status = change_account(next_email)
         if not status:
             raise RuntimeError("Account changing error")
@@ -416,29 +418,29 @@ def main():
                 elif isinstance(data, list):
                     task_keys = data
         except (json.JSONDecodeError, Exception) as e:
-            print(f"❌ Failed to parse stdin: {e}")
+            logger.error("Failed to parse stdin: %s", e)
             sys.exit(1)
 
     if not task_keys:
-        print("❌ No tasks specified. Use --tasks=key1,key2 or pipe JSON via stdin.")
-        print(f"Available tasks: {', '.join(t['key'] for t in TASK_LIST)}")
+        logger.error("No tasks specified. Use --tasks=key1,key2 or pipe JSON via stdin.")
+        logger.info("Available tasks: %s", ', '.join(t['key'] for t in TASK_LIST))
         sys.exit(1)
 
     # Validate
     valid_keys = set(TASK_MAP.keys())
     invalid = [k for k in task_keys if k not in valid_keys]
     if invalid:
-        print(f"❌ Invalid task keys: {invalid}")
-        print(f"Available: {', '.join(sorted(valid_keys))}")
+        logger.error("Invalid task keys: %s", invalid)
+        logger.info("Available: %s", ', '.join(sorted(valid_keys)))
         sys.exit(1)
 
-    print(f"✅ Starting bot with tasks: {', '.join(task_keys)}")
+    logger.info("Starting bot with tasks: %s", ', '.join(task_keys))
     if account_filter:
-        print(f"👤 Account filter: {', '.join(account_filter)}")
+        logger.info("Account filter: %s", ', '.join(account_filter))
     if character_filter:
         for email, ids in character_filter.items():
-            print(f"🎮 Character filter for {email}: {', '.join(ids)}")
-    print(f"📋 Discovered {len(TASK_MAP)} tasks from usecases/")
+            logger.info("Character filter for %s: %s", email, ', '.join(ids))
+    logger.info("Discovered %d tasks from usecases/", len(TASK_MAP))
 
     init_database(account_filter=account_filter, character_filter=character_filter)
     run_bot(task_keys)

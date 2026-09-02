@@ -3,6 +3,9 @@ import requests
 from core.core import req_ocr, tap_on_template, tap_on_text, tap_on_templates_batch, req_text
 from cmd_program.screen_action import tap_screen
 from core.coord_utils import percent_to_pixel
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def recalibrate(timeout=30):
@@ -22,7 +25,7 @@ def recalibrate(timeout=30):
         try:
             text = text[0][0].lower()
         except Exception as e:
-            print("Finding The Homepage...")
+            logger.info("Finding The Homepage...")
 
         if text == "world":
             is_home = True
@@ -31,7 +34,7 @@ def recalibrate(timeout=30):
             is_home = True
             
         if is_home:
-            print("On homepage")
+            logger.info("On homepage")
             time.sleep(1)
             break
         found = tap_on_templates_batch(
@@ -66,7 +69,7 @@ def recalibrate(timeout=30):
                 is_home = True
             if item["text"] in targets:
                 box = item["box"]
-                print(box)
+                logger.debug("OCR box: %s", box)
                 # OCR returns coordinates in pixels
                 coord = ((box[0]+box[2])//2, (box[1]+box[3])//2)
                 tap_screen(coord, coord=True)
@@ -78,7 +81,7 @@ def recalibrate(timeout=30):
             try:
                 text = text[0][0]
             except Exception as e:
-                print(f"Error... {e}")
+                logger.error("Error... %s", e)
             if text:
                 found = True
                 if text.lower() != "city" and text.lower() != "world":

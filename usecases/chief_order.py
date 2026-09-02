@@ -5,8 +5,10 @@ TASK_METADATA = [
 #coming soon
 import time
 
-import time
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -35,7 +37,7 @@ def activate_chief_order():
         if currency.lower().endswith("m") and currency[:-1].isdigit():
             currency = int(currency[:-1])*1000000
     except Exception as e:
-        print(f"Currency Reading Error - {e}")
+        logger.warning("Currency Reading Error - %s", e)
         currency = 0
 
     order_list = {"UrgentMobilization": 50000, "ProductiveDay": 50000, "RushJob":150000}
@@ -50,7 +52,7 @@ def activate_chief_order():
                 tap_on_template("Home.ChiefOrder", wait=6)
             elif status and not status1:
                 tap_on_template("Global.Back", wait=2)
-    print("Finished publishing chief order, ending the task...")
+    logger.info("Finished publishing chief order, ending the task...")
     return True
 
 

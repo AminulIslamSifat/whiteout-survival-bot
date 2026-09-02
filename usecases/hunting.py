@@ -1,5 +1,9 @@
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -22,7 +26,7 @@ def hunt_beast(count=None, use_stored_stamina=False, level=None):
     try:
         title = title[0][0].lower()
     except Exception as e:
-        print(f"Reading Error - {e}")
+        logger.warning("Reading Error - %s", e)
     if title != "city":
         recalibrate()
         tap_on_text("Home.World", wait=2)
@@ -38,7 +42,7 @@ def hunt_beast(count=None, use_stored_stamina=False, level=None):
                 time.sleep(1)
                 input_text(str(level))
         except Exception as e:
-            print(f"Level reading Error, Continuing without reading the level...")
+            logger.warning("Level reading Error, Continuing without reading the level...")
 
     tap_on_text("World.Search.Search", wait=2, sleep=1)
     tap_on_text("World.Search.Seach.Beast.Attack", wait=2)

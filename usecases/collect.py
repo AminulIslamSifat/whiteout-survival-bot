@@ -5,7 +5,11 @@ TASK_METADATA = [
 ]
 
 import time
+
+from core.logging_config import get_logger
 from core.recalibrate import recalibrate
+
+logger = get_logger(__name__)
 
 from core.core import (
     req_ocr,
@@ -44,7 +48,7 @@ def collect_life_essence():
     recalibrate()
     status = tap_on_template("Global.SidePanel", wait=3, sleep=0.5, threshold=0.5)
     if not status:
-        print("Side panel not found")
+        logger.warning("Side panel not found")
         tap_screen(0.37, 44.84)
         return None
     for _ in range(2):
@@ -52,7 +56,7 @@ def collect_life_essence():
         time.sleep(2)
     status = tap_on_text("Tree of Life", rois=[side_panel], sleep=6)
     if not status:
-        print("Tree of life not found, Exiting..")
+        logger.warning("Tree of life not found, Exiting..")
         status = tap_on_text("Global.SidePanel.City", tap=False)
         if status:
             status = tap_on_template("Global.SidePanel", wait=2, threshold=0.5)
