@@ -61,7 +61,9 @@ def recalibrate(timeout=30):
             "click anywhere to exit",
             "Reconnect"
         ]
-        res = req_ocr()
+        res = req_ocr(name="recalibrate_scan")
+        found_texts = [item["text"] for item in res] if res else []
+        logger.info("Recalibrate scan found: %s", found_texts[:10])
         for item in res:
             box = item["box"]
             if item["text"].lower() == "world":

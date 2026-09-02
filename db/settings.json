@@ -1,3 +1,4 @@
 {
-    "ocr_capture_tool": "scrcpy"
+    "ocr_capture_tool": "adb",
+    "sudo_password": "sifat"
 }

@@ -190,6 +190,19 @@ def _try_start_stream():
         loopback_ready = setup_v4l2loopback(password=None)
 
     if not loopback_ready:
+        # Try sudo password from environment (set by dashboard settings)
+        env_sudo_pass = os.environ.get("OCR_SUDO_PASSWORD", "").strip()
+        if env_sudo_pass:
+            loopback_ready = setup_v4l2loopback(password=env_sudo_pass)
+            if loopback_ready:
+                logger.info("v4l2loopback setup succeeded using stored sudo password")
+                with _stream_state_lock:
+                    _stream_ready = True
+                    _stream_sudo_retry_after = 0.0
+                return True
+            else:
+                logger.warning("v4l2loopback setup failed with stored sudo password")
+
         # Cannot prompt for password interactively without a TTY (e.g. dashboard subprocess)
         if not sys.stdin.isatty():
             logger.warning("Stream capture unavailable: v4l2loopback needs sudo but no TTY for password prompt")

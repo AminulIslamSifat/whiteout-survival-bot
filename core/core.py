@@ -311,11 +311,11 @@ def tap_on_template(
         if coord and hold:
             # Pass coord=True since coordinates are already in pixels
             long_press(coord, duration=hold, coord=True)
-            logger.debug("long pressed on - %s for %dms", name, hold)
+            logger.info("Long pressed on - %s for %dms", name, hold)
         elif coord and tap:
             # Pass coord=True since coordinates are already in pixels
             tap_screen(coord, coord=True)
-            logger.debug("pressed on - %s", name)
+            logger.info("Pressed on - %s", name)
             if sleep:
                 time.sleep(sleep)
 
@@ -347,7 +347,7 @@ def tap_on_template(
         if try_match():
             return True
         else:
-            logger.debug("No match found for - %s", name)
+            logger.warning("No match found for - %s", name)
         time.sleep(1)
 
     return None
@@ -445,7 +445,7 @@ def tap_on_text(
                 elif coord and tap:
                     # Coordinates are in pixels
                     tap_screen(coord, coord=True)
-                    logger.debug("Pressed on %s, Skipped OCR", target_text)
+                    logger.info("Pressed on %s (skip OCR", target_text)
                 if sleep:
                     time.sleep(sleep)
                 return True
@@ -476,7 +476,7 @@ def tap_on_text(
                     elif coord and tap:
                         # Coordinates are in pixels
                         tap_screen(coord, coord=True)
-                        logger.debug("Pressed on %s", item['text'])
+                        logger.info("Pressed on %s", item['text'])
 
                     if sleep:
                         time.sleep(sleep)
@@ -507,7 +507,7 @@ def tap_on_text(
                     elif coord and tap:
                         # Coordinates are in pixels
                         tap_screen(coord, coord=True)
-                        logger.debug("Pressed on %s", best_match['text'])
+                        logger.info("Pressed on %s", best_match['text'])
 
                     if sleep:
                         time.sleep(sleep)
@@ -540,7 +540,7 @@ def tap_on_text(
                                         long_press(coord, duration=hold, coord=True)
                                     elif coord and tap:
                                         tap_screen(coord, coord=True)
-                                        logger.debug("Pressed on %s", item['text'])
+                                        logger.info("Pressed on %s", item['text'])
                                     if sleep:
                                         time.sleep(sleep)
                                     return True
@@ -564,7 +564,7 @@ def tap_on_text(
                                         long_press(coord, duration=hold, coord=True)
                                     elif coord and tap:
                                         tap_screen(coord, coord=True)
-                                        logger.debug("Pressed on %s", best_match2['text'])
+                                        logger.info("Pressed on %s", best_match2['text'])
                                     if sleep:
                                         time.sleep(sleep)
                                     return True
@@ -735,7 +735,7 @@ def tap_on_templates_batch(
         if tap[i]:
             # Coordinates from template matching are in pixels
             tap_screen(coord_xy, coord=True)
-            logger.debug("Pressed on %s", names[i])
+            logger.info("Pressed on %s", names[i])
             if sleep:
                 time.sleep(sleep)
         return True
@@ -873,14 +873,14 @@ def tap_on_closest_text(
         start = time.time()
         while((time.time() - start) < wait):
             if try_match():
-                logger.debug("Pressed on closest %s of %s", target_text, base_text)
+                logger.info("Pressed on closest %s of %s", target_text, base_text)
                 return True
         logger.warning("No match found")
         return False
             
     for _ in range(3):
         if try_match():
-            logger.debug("Pressed on closest %s of %s", target_text, base_text)
+            logger.info("Pressed on closest %s of %s", target_text, base_text)
             return True
         else:
             logger.warning("No match found")

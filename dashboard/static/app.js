@@ -741,6 +741,7 @@ async function loadSettings() {
     try {
         const s = await api('/api/settings');
         document.getElementById('settingCaptureTool').value = s.ocr_capture_tool || 'adb';
+        document.getElementById('settingSudoPassword').value = s.sudo_password || '';
     } catch (e) {
         console.error('Failed to load settings:', e);
     }
@@ -750,6 +751,7 @@ async function saveSettings() {
     try {
         const payload = {
             ocr_capture_tool: document.getElementById('settingCaptureTool').value,
+            sudo_password: document.getElementById('settingSudoPassword').value,
         };
         await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
         showToast('Settings saved', 'success');

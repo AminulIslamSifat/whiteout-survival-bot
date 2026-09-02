@@ -39,6 +39,7 @@ SETTINGS_FILE = DB_DIR / "settings.json"
 
 DEFAULT_SETTINGS = {
     "ocr_capture_tool": "adb",
+    "sudo_password": "",
 }
 
 @asynccontextmanager
@@ -641,7 +642,12 @@ def _start_ocr_process():
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
         cwd=str(PROJECT_ROOT),
-        env={**os.environ, "PYTHONUNBUFFERED": "1", "OCR_CAPTURE_TOOL": _load_settings().get("ocr_capture_tool", "adb")},
+        env={
+            **os.environ,
+            "PYTHONUNBUFFERED": "1",
+            "OCR_CAPTURE_TOOL": _load_settings().get("ocr_capture_tool", "adb"),
+            "OCR_SUDO_PASSWORD": _load_settings().get("sudo_password", ""),
+        },
     )
     _ocr_status = "running"
     asyncio.create_task(_read_ocr_stream(_ocr_process))
@@ -824,6 +830,7 @@ def _save_settings(data: dict):
 
 class SettingsUpdate(BaseModel):
     ocr_capture_tool: Optional[str] = None
+    sudo_password: Optional[str] = None
 
 
 @app.get("/api/settings")
@@ -838,6 +845,8 @@ async def update_settings(update: SettingsUpdate):
         if update.ocr_capture_tool not in ("adb", "scrcpy"):
             raise HTTPException(400, "ocr_capture_tool must be 'adb' or 'scrcpy'")
         data["ocr_capture_tool"] = update.ocr_capture_tool
+    if update.sudo_password is not None:
+        data["sudo_password"] = update.sudo_password
     _save_settings(data)
     return {"status": "updated", "settings": data}
 
