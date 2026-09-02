@@ -513,6 +513,8 @@ async def ocr_stream_logs():
                 yield f"data: {json.dumps({'line': line})}\n\n"
             while True:
                 line = await queue.get()
+                if line is None:  # shutdown sentinel
+                    break
                 yield f"data: {json.dumps({'line': line})}\n\n"
         except asyncio.CancelledError:
             pass
