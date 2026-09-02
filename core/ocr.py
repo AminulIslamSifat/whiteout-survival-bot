@@ -190,6 +190,13 @@ def _try_start_stream():
         loopback_ready = setup_v4l2loopback(password=None)
 
     if not loopback_ready:
+        # Cannot prompt for password interactively without a TTY (e.g. dashboard subprocess)
+        if not sys.stdin.isatty():
+            logger.warning("Stream capture unavailable: v4l2loopback needs sudo but no TTY for password prompt")
+            with _stream_state_lock:
+                _stream_retry_after = now + STREAM_RETRY_COOLDOWN_S
+            return False
+
         with _stream_state_lock:
             if now < _stream_sudo_retry_after:
                 return False
@@ -686,6 +693,7 @@ def run_ocr(
     ocr_time_s = 0.0
     post_time_s = 0.0
 
+    img = None
     try:
         capture_start = time.perf_counter()
         img = _capture_frame(img_path, save_frame=save_frame)

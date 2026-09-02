@@ -471,14 +471,26 @@ async def stop_bot():
     _current_task = ""
     _current_player = ""
 
-    # Stop OCR engine together with the bot
-    if _ocr_status == "running" and _ocr_process and _ocr_process.poll() is None:
-        await _broadcast_log("[Dashboard] Stopping OCR engine...")
+    # Stop OCR engine together with the bot — always, regardless of tracked state
+    await _broadcast_log("[Dashboard] Stopping OCR engine...")
+    if _ocr_process and _ocr_process.poll() is None:
         _ocr_process.terminate()
         try:
             _ocr_process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             _ocr_process.kill()
+    # Kill any orphan OCR process on port 8000
+    try:
+        result = subprocess.run(
+            ["lsof", "-ti", ":8000"], capture_output=True, text=True, timeout=5
+        )
+        for pid_str in result.stdout.strip().split():
+            pid = int(pid_str)
+            if pid != os.getpid():
+                logger.info("[Stop] Killing orphan OCR process PID %d", pid)
+                os.kill(pid, signal.SIGTERM)
+    except Exception as e:
+        logger.warning("[Stop] Failed to check orphan OCR: %s", e)
     _ocr_process = None
     _ocr_status = "stopped"
 
