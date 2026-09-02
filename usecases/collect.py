@@ -5,32 +5,27 @@ TASK_METADATA = [
 ]
 
 import time
-
-from core.logging_config import get_logger
-from core.recalibrate import recalibrate
-
-logger = get_logger(__name__)
-
-from core.core import (
+from usecases._compat import (
     req_ocr,
     req_text,
     tap_on_text,
     req_temp_match,
     tap_on_template,
-    tap_on_templates_batch
-)
-from cmd_program.screen_action import(
+    tap_on_templates_batch,
     tap_screen,
     swipe_screen,
-    input_text
+    input_text,
+    recalibrate,
 )
-# pass percentages to tap/swipe; conversion happens at action layer
 
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+# pass percentages to tap/swipe; conversion happens at action layer
 
 side_panel = [0, 28.05, 62.04, 67.07]
 missions_title_area = [0, 79.67, 100, 85.37]
-
-
 
 def collect_missions_reward():
     recalibrate()
@@ -41,8 +36,6 @@ def collect_missions_reward():
     tap_on_text("daily missions", rois=[missions_title_area], wait=2)
     tap_on_text("Home.Missions.DailyMissions.ClaimAll", wait=2)
     tap_on_text("Home.Missions.TapAnywhereToExit", wait=2)
-
-
 
 def collect_life_essence():
     recalibrate()
@@ -72,8 +65,6 @@ def collect_life_essence():
         if status:
             break
     
-
-
 
 def collect_from_events():
     box = [5.56, 14.43, 97.22, 16.26]

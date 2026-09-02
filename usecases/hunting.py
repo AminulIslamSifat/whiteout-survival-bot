@@ -1,24 +1,20 @@
 import time
-
-from core.logging_config import get_logger
-from core.recalibrate import recalibrate
-
-logger = get_logger(__name__)
-
-from core.core import (
+from usecases._compat import (
     req_ocr,
     req_text,
     tap_on_text,
     req_temp_match,
     tap_on_template,
-    tap_on_templates_batch
-)
-from cmd_program.screen_action import(
+    tap_on_templates_batch,
     tap_screen,
     swipe_screen,
-    input_text
+    input_text,
+    recalibrate,
 )
 
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 def hunt_beast(count=None, use_stored_stamina=False, level=None):
     search_box = [[0, 78.86, 100, 80.49]]

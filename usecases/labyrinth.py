@@ -3,33 +3,28 @@ TASK_METADATA = [
 ]
 
 import time
-
-from core.logging_config import get_logger
-from core.recalibrate import recalibrate
-
-logger = get_logger(__name__)
-
-from core.core import (
+from usecases._compat import (
     req_ocr,
     req_text,
     tap_on_text,
     req_temp_match,
     tap_on_template,
     tap_on_templates_batch,
-    tap_on_closest_text
-)
-from cmd_program.screen_action import(
     tap_screen,
     swipe_screen,
-    input_text
+    input_text,
+    recalibrate,
+    tap_on_closest_text,
 )
+
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 # percentages passed directly; runtime conversion will occur
-
-
 
 missions_title_area = [0, 79.67, 100, 85.37]
 missions_area = [0, 18.7, 100, 79.27]
-
 
 def go_to_labyrinth():
     tap_on_template("Home.Missions", wait=2)
@@ -50,9 +45,6 @@ def go_to_labyrinth():
         if status:
             return status
     return False
-
-
-
 
 def labyrinth():
     recalibrate()
@@ -117,5 +109,4 @@ def labyrinth():
         
 
     return True
-
 

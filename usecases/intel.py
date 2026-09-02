@@ -1,31 +1,25 @@
 #coming soon
 import time
-
-from core.logging_config import get_logger
-from core.recalibrate import recalibrate
-
-logger = get_logger(__name__)
-
-from core.core import (
+from usecases._compat import (
     req_ocr,
     req_text,
     tap_on_text,
     req_temp_match,
     tap_on_template,
-    tap_on_templates_batch
-)
-from cmd_program.screen_action import(
+    tap_on_templates_batch,
     tap_screen,
     swipe_screen,
-    input_text
+    input_text,
+    recalibrate,
 )
+
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 # use percentage taps directly
 
-
-
-
 parallel = True
-
 
 def recall_current_march(lowest_time=14400):
     title = req_text("World.City")
@@ -54,7 +48,6 @@ def recall_current_march(lowest_time=14400):
             found = tap_on_template("World.Recall",sleep=1, threshold=0.9)
     
     return recalling
-
 
 def wait_till_return(lowest_time=14400):
     while(True):
@@ -86,8 +79,6 @@ def wait_till_return(lowest_time=14400):
             break
         logger.info("Waiting for %d seconds for the troops to return home...", waiting_time)
         time.sleep(waiting_time)
-
-
 
 def beast_intel():
     status = True
@@ -129,7 +120,6 @@ def beast_intel():
             tap_on_template("World.Intel", sleep=1)
             
 
-
 def survivor_intel():
     status = True
     while status:
@@ -155,7 +145,6 @@ def survivor_intel():
                 tap_on_template("World.Intel", sleep=1)
                 continue
             tap_on_template("World.Intel", sleep=1)
-
 
 def exploration_intel():
     status = True
@@ -191,7 +180,6 @@ def exploration_intel():
     return True
 
     
-
 
 def intel():
     parallel = True

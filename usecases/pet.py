@@ -4,25 +4,23 @@ TASK_METADATA = [
 ]
 
 import time
-
-from core.logging_config import get_logger
-from core.recalibrate import recalibrate
-
-logger = get_logger(__name__)
-
-from core.core import (
+from usecases._compat import (
     req_ocr,
     req_text,
     tap_on_text,
     req_temp_match,
     tap_on_template,
-    tap_on_templates_batch
-)
-from cmd_program.screen_action import(
+    tap_on_templates_batch,
     tap_screen,
     swipe_screen,
-    input_text
+    input_text,
+    recalibrate,
 )
+
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 # use percentage taps so screen_action handles conversion
 
 def collect_ally_treasure():
@@ -39,8 +37,6 @@ def collect_ally_treasure():
     tap_on_text("Home.Pet.BeastCage.Adventure.AllyTreasure.MyShares", wait=2)
     tap_on_text("Home.Pet.BeastCage.Adventure.AllyTreasure.MyShares.Share", wait=2, sleep=1)
     return True
-
-
 
 def start_pet_exploration():
     exploration_roi = [0, 16.26, 100, 89.43]
@@ -157,9 +153,6 @@ def start_pet_exploration():
                 logger.error("Something went wrong")
 
     logger.info("Task - Pet Exploration Completed, Returning to homepage...")
-
-
-
 
 def activate_reward_pet_skill():
     return

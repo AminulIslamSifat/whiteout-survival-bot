@@ -3,35 +3,27 @@ TASK_METADATA = [
 ]
 
 import time
-
-from core.logging_config import get_logger
-from core.recalibrate import recalibrate
-
-logger = get_logger(__name__)
-
-from core.core import (
+from usecases._compat import (
     req_ocr,
     req_text,
     tap_on_text,
     req_temp_match,
     tap_on_template,
     tap_on_templates_batch,
-    tap_on_closest_text
-)
-from cmd_program.screen_action import(
     tap_screen,
     swipe_screen,
-    input_text
+    input_text,
+    recalibrate,
+    tap_on_closest_text,
+    pct_to_px,
 )
-from core.coord_utils import pct_to_px
 
+from core.logging_config import get_logger
 
-
+logger = get_logger(__name__)
 
 missions_title_area = [0, 79.67, 100, 85.37]
 missions_area = [0, 18.7, 100, 79.27]
-
-
 
 def challenge_lowest_power():
     challenge_icons = [
@@ -62,9 +54,6 @@ def challenge_lowest_power():
     else:
         tap_on_template("Home.Arena.Challenge.Challenge", wait=2)
 
-
-
-
 def find_arena():
     tap_on_template("Home.Missions", wait=2)
     status = tap_on_text("Daily Missions", rois=[missions_title_area], wait=2)
@@ -84,8 +73,6 @@ def find_arena():
         if status:
             return status
     return False
-
-
 
 def arena():
     attempt = 0
@@ -128,6 +115,4 @@ def arena():
         
     logger.info("Finished the task - Arena Of Glory, Returning to homepage...")
     recalibrate()
-
-
 

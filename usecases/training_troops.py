@@ -3,31 +3,27 @@ TASK_METADATA = [
 ]
 
 import time
-
-from core.logging_config import get_logger
-from core.recalibrate import recalibrate
-
-logger = get_logger(__name__)
-
-from core.core import (
+from usecases._compat import (
     req_ocr,
     req_text,
     tap_on_text,
     req_temp_match,
     tap_on_template,
-    tap_on_templates_batch
-)
-from cmd_program.screen_action import(
+    tap_on_templates_batch,
     tap_screen,
     swipe_screen,
-    input_text
+    input_text,
+    recalibrate,
 )
-# use percentages directly; let screen_action convert per-device
 
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+# use percentages directly; let screen_action convert per-device
 
 side_panel = [0, 28.05, 62.04, 67.07]
 training_menu = [23.15, 56.91, 86.11, 73.17]
-
 
 def train():
 
@@ -82,8 +78,6 @@ def train():
 
     return True
 
-
-
 def train_infantry(Amount=None):
 
     recalibrate()
@@ -122,7 +116,6 @@ def train_infantry(Amount=None):
             tap_on_text("Home.TroopTraining.Speedup.QuickUse.Use", wait=2)
         
 
-
 def train_lancer(Amount=None):
 
     recalibrate()
@@ -160,8 +153,6 @@ def train_lancer(Amount=None):
         if status:
             tap_on_text("Home.TroopTraining.Speedup.QuickUse.Use", wait=2)
 
-
-
 def train_marksman(Amount=None):
     
     recalibrate()
@@ -198,5 +189,4 @@ def train_marksman(Amount=None):
             status = tap_on_text("Home.TroopTraining.Speedup.QuickUse", wait=2)
         if status:
             tap_on_text("Home.TroopTraining.Speedup.QuickUse.Use", wait=2)
-
 

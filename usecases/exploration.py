@@ -4,27 +4,22 @@ TASK_METADATA = [
 ]
 
 import time
-
-from core.logging_config import get_logger
-from core.recalibrate import recalibrate
-
-logger = get_logger(__name__)
-
-from core.core import (
+from usecases._compat import (
     req_ocr,
     req_text,
     tap_on_text,
     req_temp_match,
     tap_on_template,
-    tap_on_templates_batch
-)
-from cmd_program.screen_action import(
+    tap_on_templates_batch,
     tap_screen,
     swipe_screen,
-    input_text
+    input_text,
+    recalibrate,
 )
 
+from core.logging_config import get_logger
 
+logger = get_logger(__name__)
 
 def claim_exploration_idle_income():
     status = tap_on_text("Home.Exploration")
@@ -39,10 +34,7 @@ def claim_exploration_idle_income():
 
     recalibrate()
 
-
     
-
-
 
 def continue_exploring(stopping_level=None):
     logger.info("Started Exploration...")
@@ -61,7 +53,6 @@ def continue_exploring(stopping_level=None):
     # --- start ---
     ensure_open_exploration()
     setup_exploration()
-
 
     is_auto = True
 
@@ -90,6 +81,4 @@ def continue_exploring(stopping_level=None):
                 v = tap_on_text("Home.Exploration.Explore.Fight.ReturnToCity", wait=2)
                 logger.warning("Failed the stage, Returning to the Homepage")
                 break
-
-
 

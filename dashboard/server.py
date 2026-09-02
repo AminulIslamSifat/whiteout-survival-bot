@@ -428,7 +428,7 @@ async def start_bot(selection: TaskSelection):
 
     try:
         _bot_process = subprocess.Popen(
-            [sys.executable, str(PROJECT_ROOT / "Main" / "main.py")],
+            [sys.executable, str(PROJECT_ROOT / "run_bot.py")],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

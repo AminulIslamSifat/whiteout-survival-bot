@@ -49,8 +49,8 @@ class GameFSM:
                 "shop": {"action": "text", "target": "Home.Store"},
                 "vip": {"action": "text", "target": "Home.VIPLevel"},
                 "mail": {"action": "template", "target": "Home.Mail"},
-                "missions": {"action": "template", "target": "Home.Missions"},
-                "labyrinth": {"action": "template", "target": "Home.Labyrinth"},
+            "missions": {"action": "template", "target": "Home.Missions"},
+            "labyrinth": {"action": "template", "target": "Home.Labyrinth"},
                 "pet": {"action": "template", "target": "Home.Pet"},
                 "chief_order": {"action": "template", "target": "Home.ChiefOrder"},
                 "troop_training": {"action": "template", "target": "Global.SidePanel"},
@@ -97,6 +97,7 @@ class GameFSM:
             },
             "missions": {
                 "main_city": {"action": "template", "target": "Global.Back"},
+                "arena": {"action": "text", "target": "Home.Arena.MissionGo"},
             },
             "arena": {
                 "missions": {"action": "template", "target": "Global.Back"},

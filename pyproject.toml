@@ -14,5 +14,8 @@ dependencies = [
     "setuptools>=80.4.0",
     "uvicorn>=0.44.0",
     "rapidfuzz>=3.14.5",
-    "rich>=15.0.0"
+    "rich>=15.0.0",
+    "pyyaml>=6.0",
+    "requests>=2.31.0",
+    "httpx>=0.27.0"
 ]

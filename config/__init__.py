@@ -62,8 +62,20 @@ class BotConfig:
         return self.references_dir / "TextArea"
 
 
+def _read_dynamic_ocr_port() -> int | None:
+    """Read OCR port from system/.ocr_port file (written by OCR server at startup)."""
+    port_file = _PROJECT_ROOT / "system" / ".ocr_port"
+    try:
+        return int(port_file.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
 def load_config(path: Path | None = None) -> BotConfig:
-    """Load config from YAML file with env var overrides."""
+    """Load config from YAML file with env var overrides.
+    
+    OCR port priority: env OCR_PORT > system/.ocr_port > YAML > default (8000)
+    """
     cfg = BotConfig()
     config_path = path or _CONFIG_PATH
 
@@ -94,6 +106,11 @@ def load_config(path: Path | None = None) -> BotConfig:
         dev = data.get("device", {})
         if "preferred_device_id" in dev:
             cfg.device.preferred_device_id = dev["preferred_device_id"]
+
+    # Dynamic port from system/.ocr_port (written by OCR server)
+    dynamic_port = _read_dynamic_ocr_port()
+    if dynamic_port is not None:
+        cfg.ocr.port = dynamic_port
 
     # Env overrides always win
     if v := os.environ.get("OCR_PORT"):

@@ -3,29 +3,24 @@ TASK_METADATA = [
 ]
 
 import time
-
-from core.logging_config import get_logger
-from core.recalibrate import recalibrate
-
-logger = get_logger(__name__)
-
-from core.core import (
+from usecases._compat import (
     req_ocr,
     req_text,
     tap_on_text,
     req_temp_match,
     tap_on_template,
-    tap_on_templates_batch
-)
-from cmd_program.screen_action import(
+    tap_on_templates_batch,
     tap_screen,
     swipe_screen,
-    input_text
+    input_text,
+    recalibrate,
 )
+
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 # use percentages directly; screen_action will convert per-device
-
-
-
 
 def wait_till_return(lowest_time=14400):
     recalling = recall_current_gathering(lowest_time=lowest_time)
@@ -62,8 +57,6 @@ def wait_till_return(lowest_time=14400):
             break
         logger.info("Waiting for %d seconds for the troops to return home...", waiting_time)
         time.sleep(waiting_time)
-
-
 
 def gather(remove_hero=False, equalize=True, lowest_time=14400):
     logger.info("Started Gathering...")
@@ -163,9 +156,6 @@ def gather(remove_hero=False, equalize=True, lowest_time=14400):
         logger.warning("The search tab may still be opened, Trying to recover...")
     logger.info("Completed the gathering task, Returning to homepage...")
     recalibrate()
-
-
-
 
 def recall_current_gathering(lowest_time=14400):
     time.sleep(0.5)
