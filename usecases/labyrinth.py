@@ -15,6 +15,7 @@ from cmd_program.screen_action import(
     swipe_screen,
     input_text
 )
+# percentages passed directly; runtime conversion will occur
 
 
 
@@ -37,7 +38,7 @@ def go_to_labyrinth():
             swipe_screen(50.93, 56.91, 50.93, 38.21, duration=1500)
             time.sleep(0.5)
             continue
-        status = tap_on_closest_text(base, target, rois=[missions_area], wait=2, maximum_distance=500)
+        status = tap_on_closest_text(base, target, rois=[missions_area], wait=2, maximum_distance=20.33)
         if status:
             return status
     return False

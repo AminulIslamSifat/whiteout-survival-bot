@@ -12,6 +12,10 @@ from rich.console import Console
 from rapidfuzz import fuzz
 import re
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from cmd_program.screen_action import (
     tap_screen,
     swipe_screen,
@@ -25,6 +29,7 @@ from core.core import (
     tap_on_template,
     req_text
 )
+from core.coord_utils import pct_to_px
 
 from usecases.exploration import(
     claim_exploration_idle_income,

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import json
-
+from cmd_program.resolution_utils import get_stream_resolution, get_device_resolution
 
 
 try:
@@ -60,7 +60,9 @@ class ScreenStreamService:
         audio = False,
         show_screen = True,
         turn_screen_off = True,
-        max_size = 0
+        max_size = 0,
+        device_id: str = None,
+        use_dynamic_resolution: bool = True
     ):
         if config != None:
             video_device=config["video_device"]
@@ -78,6 +80,8 @@ class ScreenStreamService:
         self.video_device = Path(video_device)
         self.width = int(width)
         self.height = int(height)
+        self.device_id = device_id
+        self.use_dynamic_resolution = use_dynamic_resolution
         self.startup_timeout = float(startup_timeout)
         self.video_bit_rate = str(video_bit_rate)
         self.ffmpeg_start_retries = int(ffmpeg_start_retries)
@@ -107,6 +111,16 @@ class ScreenStreamService:
     def start(self):
         if self.is_running:
             return
+
+        # Fetch dynamic resolution if enabled and device_id is available
+        if self.use_dynamic_resolution and self.device_id:
+            try:
+                stream_width, stream_height = get_stream_resolution(self.device_id, apply_scrcpy_quirk=True)
+                self.width = stream_width
+                self.height = stream_height
+                print(f"[INFO] Dynamic resolution: {self.width}x{self.height}")
+            except Exception as e:
+                print(f"[WARN] Failed to detect dynamic resolution: {e}. Using configured: {self.width}x{self.height}")
 
         self.stop()
         self._stop_event.clear()
@@ -184,7 +198,7 @@ class ScreenStreamService:
             time.sleep(0.01)
 
     def _build_ffmpeg_cmd(self):
-        return [
+        cmd = [
             "ffmpeg",
             "-hide_banner",
             "-loglevel",
@@ -195,12 +209,22 @@ class ScreenStreamService:
             "512",
             "-i",
             str(self.video_device),
+        ]
+
+        # Force ffmpeg to output frames at the configured width/height so
+        # the raw frame reader can compute a stable frame size.
+        if self.width and self.height:
+            cmd.extend(["-s", f"{self.width}x{self.height}"])
+
+        cmd.extend([
             "-f",
             "rawvideo",
             "-pix_fmt",
             "bgr24",
             "pipe:1",
-        ]
+        ])
+
+        return cmd
 
     def _start_ffmpeg_with_retries(self):
         last_error = "unknown"
@@ -256,7 +280,8 @@ class ScreenStreamService:
         # Continue anyway and let ffmpeg retries handle final readiness.
 
     def _reader_loop(self):
-        frame_size = self.width * self.height * 3
+        # compute frame_size at loop start so any dynamic changes are honored
+        frame_size = int(self.width) * int(self.height) * 3
         while not self._stop_event.is_set():
             raw = self._read_exact(frame_size)
             if raw is None:
@@ -264,7 +289,30 @@ class ScreenStreamService:
                     break
                 continue
 
-            frame = np.frombuffer(raw, np.uint8).reshape((self.height, self.width, 3))
+            try:
+                frame = np.frombuffer(raw, np.uint8).reshape((int(self.height), int(self.width), 3))
+            except Exception:
+                # If frame size doesn't match expectations, attempt to recover by
+                # inferring dimensions from the raw length (dividing by 3) and
+                # falling back to width/height swap if needed.
+                total_pixels = len(raw) // 3
+                if total_pixels == 0:
+                    continue
+                # try using configured width to compute height
+                if int(self.width) and total_pixels % int(self.width) == 0:
+                    inferred_h = total_pixels // int(self.width)
+                    frame = np.frombuffer(raw, np.uint8).reshape((inferred_h, int(self.width), 3))
+                    # update stored height to match inferred
+                    self.height = inferred_h
+                else:
+                    # fallback: try configured height to compute width
+                    if int(self.height) and total_pixels % int(self.height) == 0:
+                        inferred_w = total_pixels // int(self.height)
+                        frame = np.frombuffer(raw, np.uint8).reshape((int(self.height), inferred_w, 3))
+                        self.width = inferred_w
+                    else:
+                        # give up on this frame
+                        continue
             with self._frame_lock:
                 self._latest_frame = frame
 
@@ -302,8 +350,10 @@ class ScreenStreamService:
 _stream_service = ScreenStreamService()
 
 
-def start_screen_stream(**kwargs):
+def start_screen_stream(device_id: str = None, **kwargs):
     global _stream_service
+    if device_id:
+        kwargs['device_id'] = device_id
     if kwargs:
         _stream_service = ScreenStreamService(**kwargs)
     _stream_service.start()

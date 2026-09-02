@@ -9,9 +9,9 @@ import requests
 from itertools import repeat
 from pathlib import Path
 from rapidfuzz import fuzz
-from cmd_program.screen_action import tap_screen, take_screenshot, long_press
+from cmd_program.screen_action import tap_screen, take_screenshot, long_press, _get_screen_size
 from concurrent.futures import ThreadPoolExecutor
-from core.coord_utils import box_percent_to_pixel
+from core.coord_utils import box_percent_to_pixel, box_pixel_to_percent, round_percentages, set_base_resolution
 
 
 
@@ -38,6 +38,7 @@ def init_database():
     with open("references/icon/template_config.json") as f:
         template_area = json.load(f)
 
+    # Load default text area
     files = [f for f in Path("references/TextArea").rglob("*.json") if f.is_file()]
 
     for file in files:
@@ -52,46 +53,127 @@ def init_database():
 
         except Exception as e:
             print(f"Error in {file} - {e}")
+    
+    # Load device-specific calibration (overrides defaults)
+    _load_device_specific_calibration()
+
+
+def _load_device_specific_calibration():
+    """Load device-specific calibration data if available."""
+    global text_area
+    
+    try:
+        from cmd_program.screen_action import device_id
+        
+        if not device_id:
+            return  # No device connected
+        
+        device_folder = Path(f"references/{device_id}")
+        if not device_folder.exists():
+            return  # No device-specific calibration yet
+        
+        files = [f for f in device_folder.glob("*.json") if f.is_file() and not f.name.startswith("_")]
+        
+        if not files:
+            return  # No calibration files
+        
+        print(f"\n📱 Loading device-specific calibration for {device_id}...")
+        
+        for file in files:
+            try:
+                with open(file, "r") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        old_count = len(text_area)
+                        text_area.update(data)
+                        new_items = len(text_area) - old_count
+                        print(f"   ✅ {file.name}: +{new_items} items")
+            except Exception as e:
+                print(f"   ⚠️ Error loading {file.name}: {e}")
+        
+        print(f"   📊 Total text areas: {len(text_area)}\n")
+        
+    except Exception as e:
+        print(f"   ⚠️ Could not load device calibration: {e}")
+
+
+def sync_resolution_with_device():
+    """
+    Sync the base resolution in coord_utils with the actual device resolution.
+    Call this to update percentage-based coordinate calculations for the current device.
+    """
+    try:
+        width, height = _get_screen_size()
+        set_base_resolution(width, height)
+        print(f"✅ Coordinate system synchronized: {width}×{height}")
+    except Exception as e:
+        print(f"⚠️ Could not sync device resolution: {e}")
+
+
+def reload_device_calibration():
+    """
+    Reload device-specific calibration data.
+    Useful when switching devices or after running recalibrate_device.py
+    """
+    global text_area
+    
+    print("\n🔄 Reloading calibration...")
+    text_area.clear()
+    init_database()
 
 
 def _convert_rois_percent_to_pixel(rois):
-    """Convert ROI coordinates from percentages to pixels.
-    
-    Handles formats:
-    - None: returns None
-    - Single box (4 elements): converts to pixel coordinates
-    - List of boxes: converts each box
-    """
+    """Convert percentage-based ROI coordinates to pixel coordinates for the OCR service."""
     if rois is None:
         return None
+
+    def _is_percent_box(box):
+        try:
+            return (
+                isinstance(box, (list, tuple))
+                and len(box) == 4
+                and all(isinstance(v, (int, float)) for v in box)
+                and all(0 <= v <= 100 for v in box)
+            )
+        except Exception:
+            return False
     
     if isinstance(rois, list):
         if len(rois) == 0:
             return rois
         
-        # Check if it's a single box [x1, y1, x2, y2]
         if len(rois) == 4 and isinstance(rois[0], (int, float)):
-            # Check if any value is > 100 (likely already pixels)
-            if any(v > 100 for v in rois):
-                return rois
-            # Convert from percentage to pixels
-            return box_percent_to_pixel(rois)
+            return box_percent_to_pixel(rois) if _is_percent_box(rois) else rois
         
-        # Check if it's a list of boxes [[x1,y1,x2,y2], ...]
         if isinstance(rois[0], list):
             result = []
             for box in rois:
                 if len(box) == 4:
-                    # Check if already in pixels
-                    if any(v > 100 for v in box):
-                        result.append(box)
-                    else:
-                        result.append(box_percent_to_pixel(box))
+                    result.append(box_percent_to_pixel(box) if _is_percent_box(box) else box)
                 else:
                     result.append(box)
             return result
     
     return rois
+
+
+def _convert_results_boxes_to_percent(results):
+    if not results:
+        return results
+
+    converted = []
+    for item in results:
+        if not isinstance(item, dict):
+            converted.append(item)
+            continue
+
+        converted_item = item.copy()
+        box = converted_item.get("box")
+        if isinstance(box, list) and len(box) == 4:
+            converted_item["box"] = round_percentages(box_pixel_to_percent(box), decimals=2)
+        converted.append(converted_item)
+
+    return converted
 
 
 def _post_json_with_replay(url, payload, request_name, wait_sec=OCR_REPLAY_WAIT_SEC):
@@ -131,7 +213,7 @@ def _post_json_with_replay(url, payload, request_name, wait_sec=OCR_REPLAY_WAIT_
 
 
 def req_ocr(img_path=None, save_result=None, rois=None, name=None, expected_text = None):
-    # Convert percentage-based ROIs to pixels
+    # Convert percentage-based ROIs to pixels for the OCR service.
     rois = _convert_rois_percent_to_pixel(rois)
     
     payload = {
@@ -146,6 +228,7 @@ def req_ocr(img_path=None, save_result=None, rois=None, name=None, expected_text
     if not data:
         return None
     
+    # Return results with pixel coordinates directly (no conversion back to percentages)
     result = data["results"]
     return result
 
@@ -154,7 +237,7 @@ def req_ocr(img_path=None, save_result=None, rois=None, name=None, expected_text
 
 
 def req_temp_match(name, threshold=0.8, save_result=None, rois=None, parallel=None, session_id=None):
-    # Convert percentage-based ROIs to pixels
+    # Convert percentage-based ROIs to pixels for the template service.
     rois = _convert_rois_percent_to_pixel(rois)
     
     payload = {
@@ -170,6 +253,7 @@ def req_temp_match(name, threshold=0.8, save_result=None, rois=None, parallel=No
     if not data:
         return None
     
+    # Return results with pixel coordinates directly (no conversion back to percentages)
     results = data["results"]
     return results
 
@@ -218,13 +302,17 @@ def tap_on_template(
             return None
         result = max(results, key=lambda x:x["score"])
         coord = result["box"]
+        # Calculate center from pixel coordinates (result["box"] is in pixels)
         coord = ((coord[0]+coord[2])//2, (coord[1]+coord[3])//2)
 
         if coord and hold:
-            long_press(coord, duration=hold)
+            # Pass coord=True since coordinates are already in pixels
+            long_press(coord, duration=hold, coord=True)
+            print(f"long pressed on - {name} for {hold}ms")
         elif coord and tap:
-            tap_screen(coord)
-
+            # Pass coord=True since coordinates are already in pixels
+            tap_screen(coord, coord=True)
+            print(f"pressed on - {name}")
             if sleep:
                 time.sleep(sleep)
 
@@ -247,17 +335,13 @@ def tap_on_template(
         return None
 
     # --- retry mode ---
-    start = time.time()
-    for _ in range(3):
-        elapsed = time.time() - start
+    for steps in range(3):
         if passed_threshold == None:
-            steps = int(elapsed / 0.4)
             threshold = _orig_threshold - steps * 0.05
             if threshold < 0.6:
                 threshold = 0.6
 
         if try_match():
-            print(f"Pressed on - {name}")
             return True
         else:
             print(f"No match found for - {name}")
@@ -285,22 +369,31 @@ def tap_on_text(
 
     if align == None or not isinstance(align, list) or len(align) != 2:
         align = [0, 0]
+    
+    # Convert align from percentage offset to pixel offset
+    screen_width, screen_height = _get_screen_size()
+    align_px = (
+        int((align[0] / 100) * screen_width),
+        int((align[1] / 100) * screen_height)
+    )
+    
     threshold = threshold * 100
 
     def normalize_rois(box):
         if box is None:
             return None
 
-        # already correct format [[...]]
-        if isinstance(box, list) and len(box) == 1 and isinstance(box[0], list):
-            return box
+        # Already list of lists [[x1,y1,x2,y2], [x1,y1,x2,y2]]
+        if isinstance(box, list) and all(isinstance(b, list) and len(b) == 4 for b in box):
+            return box  # ✅ multiple rois!!
 
-        # single box → wrap it
-        if isinstance(box, list) and len(box) == 4:
-            return [box]
+        # Single flat box [x1,y1,x2,y2] → wrap it
+        if isinstance(box, list) and len(box) == 4 and all(isinstance(v, (int, float)) for v in box):
+            return [box]  # ✅
 
         print("Invalid ROI format:", box)
         return None
+    
 
     def load_config(text, rois=None):
         if isinstance(text, str):
@@ -326,17 +419,29 @@ def tap_on_text(
         for key, value in texts.items():
             target_text = value["text"]
             box = value["box"]
-
             if skip_ocr and box is not None:
-                coord = (
-                    (box[0] + box[2] + align[0]) // 2,
-                    (box[1] + box[3] + align[1]) // 2
-                )
+                # Robust percent detection: treat box as percentages if all values are numeric and within 0..100
+                def _is_percent_box(b):
+                    try:
+                        if not isinstance(b, (list, tuple)) or len(b) != 4:
+                            return False
+                        return all(isinstance(v, (int, float)) and 0 <= v <= 100 for v in b)
+                    except Exception:
+                        return False
+
+                pixel_box = box_percent_to_pixel(box) if _is_percent_box(box) else box
+
+                # Compute center first, then apply screen-alignment offset (align_px)
+                center_x = (pixel_box[0] + pixel_box[2]) // 2
+                center_y = (pixel_box[1] + pixel_box[3]) // 2
+                coord = (center_x + align_px[0], center_y + align_px[1])
 
                 if coord and hold:
-                    long_press(coord, duration=hold)
+                    # Coordinates are in pixels
+                    long_press(coord, duration=hold, coord=True)
                 elif coord and tap:
-                    tap_screen(coord)
+                    # Coordinates are in pixels
+                    tap_screen(coord, coord=True)
                     print(f"Pressed on {target_text}, Skipped OCR")
                 if sleep:
                     time.sleep(sleep)
@@ -357,14 +462,17 @@ def tap_on_text(
                     if not use_box:
                         continue
 
-                    coord = (
-                        (use_box[0] + use_box[2] + align[0]) // 2,
-                        (use_box[1] + use_box[3] + align[1]) // 2
-                    )
+                    # OCR results are in pixels
+                    # Compute center first, then apply screen-alignment offset (align_px)
+                    center_x = (use_box[0] + use_box[2]) // 2
+                    center_y = (use_box[1] + use_box[3]) // 2
+                    coord = (center_x + align_px[0], center_y + align_px[1])
                     if coord and hold:
-                        long_press(coord, duration=hold)
+                        # Coordinates are in pixels
+                        long_press(coord, duration=hold, coord=True)
                     elif coord and tap:
-                        tap_screen(coord)
+                        # Coordinates are in pixels
+                        tap_screen(coord, coord=True)
                         print(f"Pressed on {item['text']}")
 
                     if sleep:
@@ -385,14 +493,17 @@ def tap_on_text(
                     if not use_box:
                         continue
 
-                    coord = (
-                        (use_box[0] + use_box[2] + align[0]) // 2,
-                        (use_box[1] + use_box[3] + align[1]) // 2
-                    )
+                    # OCR results are in pixels
+                    # Compute center first, then apply screen-alignment offset (align_px)
+                    center_x = (use_box[0] + use_box[2]) // 2
+                    center_y = (use_box[1] + use_box[3]) // 2
+                    coord = (center_x + align_px[0], center_y + align_px[1])
                     if coord and hold:
-                        long_press(coord, duration=hold)
+                        # Coordinates are in pixels
+                        long_press(coord, duration=hold, coord=True)
                     elif coord and tap:
-                        tap_screen(coord)
+                        # Coordinates are in pixels
+                        tap_screen(coord, coord=True)
                         print(f"Pressed on {best_match['text']}")
 
                     if sleep:
@@ -417,14 +528,15 @@ def tap_on_text(
                                     use_box = item.get("box")
                                     if not use_box:
                                         continue
-                                    coord = (
-                                        (use_box[0] + use_box[2] + align[0]) // 2,
-                                        (use_box[1] + use_box[3] + align[1]) // 2
-                                    )
+                                    # OCR results are in pixels
+                                    # Compute center then apply align offset
+                                    center_x = (use_box[0] + use_box[2]) // 2
+                                    center_y = (use_box[1] + use_box[3]) // 2
+                                    coord = (center_x + align_px[0], center_y + align_px[1])
                                     if coord and hold:
-                                        long_press(coord, duration=hold)
+                                        long_press(coord, duration=hold, coord=True)
                                     elif coord and tap:
-                                        tap_screen(coord)
+                                        tap_screen(coord, coord=True)
                                         print(f"Pressed on {item['text']}")
                                     if sleep:
                                         time.sleep(sleep)
@@ -440,14 +552,15 @@ def tap_on_text(
                             if best_match2:
                                 use_box = best_match2.get("box")
                                 if use_box:
-                                    coord = (
-                                        (use_box[0] + use_box[2] + align[0]) // 2,
-                                        (use_box[1] + use_box[3] + align[1]) // 2
-                                    )
+                                    # OCR results are in pixels
+                                    # Compute center then apply align offset
+                                    center_x = (use_box[0] + use_box[2]) // 2
+                                    center_y = (use_box[1] + use_box[3]) // 2
+                                    coord = (center_x + align_px[0], center_y + align_px[1])
                                     if coord and hold:
-                                        long_press(coord, duration=hold)
+                                        long_press(coord, duration=hold, coord=True)
                                     elif coord and tap:
-                                        tap_screen(coord)
+                                        tap_screen(coord, coord=True)
                                         print(f"Pressed on {best_match2['text']}")
                                     if sleep:
                                         time.sleep(sleep)
@@ -494,9 +607,9 @@ def tap_on_text(
 
 def req_text(names=None, img_path=None, rois=None, save_result=False, coord=None):
 
-    # If no name is provided, send full page OCR
+    # If no name is provided, send OCR for the caller-supplied ROI(s), or full page if none were given.
     if not names:
-        res = req_ocr(img_path, save_result, rois=None, name="full_page")
+        res = req_ocr(img_path, save_result, rois=rois, name="full_page")
         if res is None:
             print("OCR failed")
             return None
@@ -509,20 +622,35 @@ def req_text(names=None, img_path=None, rois=None, save_result=False, coord=None
         if isinstance(names, str):
             names = [names]
 
+        # Determine boxes to use for each name.
         names_boxes = []
-        title = ""
+        title = ", ".join(names) + (", " if len(names) == 1 else "")
+
+        # If rois provided, handle three possibilities:
+        # 1) rois is a single box [x1,y1,x2,y2] -> apply to all names
+        # 2) rois is a list of boxes [[...], [...]] -> map by index (reuse last if short)
+        # 3) rois is None -> use text_area boxes or full screen fallback
+        if rois is not None:
+            # list of boxes ([[...], [...]])
+            if isinstance(rois, list) and len(rois) > 0 and isinstance(rois[0], (list, tuple)):
+                for i, name in enumerate(names):
+                    if i < len(rois):
+                        names_boxes.append(rois[i])
+                    else:
+                        names_boxes.append(text_area.get(name, {}).get("box", [0, 0, 100, 100]))
+                return names_boxes, title
+
+            # single box [x1,y1,x2,y2]
+            if isinstance(rois, list) and len(rois) == 4 and all(isinstance(v, (int, float)) for v in rois):
+                return [rois for _ in names], title
+
+            # unexpected format -> ignore rois
 
         for name in names:
             if name in text_area:
-                title += name + ", "
-                box = text_area[name]["box"]
+                names_boxes.append(text_area[name].get("box", [0, 0, 100, 100]))
             else:
-                box = [0, 0, 100, 100]  # Full screen in percentage (100% width, 100% height)
-
-            if rois is not None:
-                names_boxes = rois
-
-            names_boxes.append(box)
+                names_boxes.append([0, 0, 100, 100])
 
         return names_boxes, title
 
@@ -602,7 +730,8 @@ def tap_on_templates_batch(
         box = best["box"]  # ✅ Fix 2: always access like this, no [0] indexing
         coord_xy = ((box[0] + box[2]) // 2, (box[1] + box[3]) // 2)
         if tap[i]:
-            tap_screen(coord_xy)
+            # Coordinates from template matching are in pixels
+            tap_screen(coord_xy, coord=True)
             print(f"Pressed on {names[i]}")
             if sleep:
                 time.sleep(sleep)
@@ -664,6 +793,15 @@ def tap_on_closest_text(
     ):
     threshold = threshold * 100 if threshold else 80
     
+    # Convert align from percentage offset to pixel offset
+    if align == None or not isinstance(align, list) or len(align) != 2:
+        align = [0, 0]
+    screen_width, screen_height = _get_screen_size()
+    align_px = (
+        int((align[0] / 100) * screen_width),
+        int((align[1] / 100) * screen_height)
+    )
+    
     def center(box):
         x1, y1, x2, y2 = box
         return ((x1 + x2) // 2, (y1 + y2) // 2)
@@ -671,10 +809,7 @@ def tap_on_closest_text(
     def distance(c1, c2):
         return ((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2)**0.5
 
-    def apply_align(point):
-        if not align:
-            return point
-        return (point[0] + align[0], point[1] + align[1])
+    # apply_align removed; align is converted at function start
     
     def try_match():
         try:
@@ -716,9 +851,11 @@ def tap_on_closest_text(
                 if distance(center(closest_target["box"]), base_center) > maximum_distance:
                     return None
             
-            target_center = apply_align(center(closest_target["box"]))
+            target_center_raw = center(closest_target["box"])
+            target_center = (target_center_raw[0] + align_px[0], target_center_raw[1] + align_px[1])
             if target_center:
-                tap_screen(target_center)
+                # target_center computed from OCR boxes (pixels)
+                tap_screen(target_center, coord=True)
                 if sleep:
                     time.sleep(sleep)
                 print(f"Distance: {distance(center(closest_target['box']), base_center)}")

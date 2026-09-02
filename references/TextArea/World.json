@@ -98,5 +98,15 @@
             81.48,
             62.76
         ]
+    },
+    "World.Search.Search.Beast.Attack": {
+        "text": "Attack",
+        "score": 0.9984614849090576,
+        "box": [
+            0.81,
+            0.96,
+            0.99,
+            0.98
+        ]
     }
 }

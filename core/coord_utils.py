@@ -1,11 +1,34 @@
 """
 Coordinate conversion utilities for percentage-based screen coordinates.
-Base resolution: 1080x2460 (100% = 1080 width, 100% = 2460 height)
+Base resolution: Dynamically detected, with fallback to 1080x2456
 """
 
 # Base resolution used for percentage calculations
+# These can be updated at runtime via set_base_resolution()
 BASE_WIDTH = 1080
-BASE_HEIGHT = 2460
+BASE_HEIGHT = 2456
+
+_base_resolution_set = False
+
+
+def set_base_resolution(width: int, height: int) -> None:
+    """
+    Set the base resolution for percentage calculations.
+    This should be called with the actual device resolution.
+    
+    Args:
+        width: Screen width in pixels
+        height: Screen height in pixels
+    """
+    global BASE_WIDTH, BASE_HEIGHT, _base_resolution_set
+    BASE_WIDTH = int(width)
+    BASE_HEIGHT = int(height)
+    _base_resolution_set = True
+
+
+def get_base_resolution() -> tuple[int, int]:
+    """Get the current base resolution used for calculations."""
+    return BASE_WIDTH, BASE_HEIGHT
 
 
 def pixel_to_percent(x: float, y: float) -> tuple[float, float]:
@@ -45,3 +68,12 @@ def box_percent_to_pixel(box: list[float],
 def round_percentages(box: list[float], decimals: int = 2) -> list[float]:
     """Round percentage values to specified decimal places."""
     return [round(v, decimals) for v in box]
+
+
+def pct_to_px(x_percent: float, y_percent: float,
+              screen_width: int = BASE_WIDTH,
+              screen_height: int = BASE_HEIGHT) -> tuple[int, int]:
+    """Convenience function: convert percentage coordinates to pixel coordinates as a tuple."""
+    x_pixel = int((x_percent / 100) * screen_width)
+    y_pixel = int((y_percent / 100) * screen_height)
+    return (x_pixel, y_pixel)

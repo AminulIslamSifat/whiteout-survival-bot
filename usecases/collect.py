@@ -14,6 +14,7 @@ from cmd_program.screen_action import(
     swipe_screen,
     input_text
 )
+# pass percentages to tap/swipe; conversion happens at action layer
 
 
 side_panel = [0, 28.05, 62.04, 67.07]
@@ -71,11 +72,11 @@ def collect_from_events():
     
     status = True
     while(status):
-        status = tap_on_text("claimable", rois=[[0, 0, 100, 43.9]], wait=2, align=[0, -50])
+        status = tap_on_text("claimable", rois=[[0, 0, 100, 43.9]], wait=2, align=[0, -2.03])
         if not status:
             status = tap_on_text("free", rois = [0, 0, 100, 43.9], wait=2)
             if status:
-                tap_on_text("Tap anywhere to exit", wait=2, align=[0, 50])
+                tap_on_text("Tap anywhere to exit", wait=2, align=[0, 2.03])
         if status:
             tap_on_template("Global.Back", threshold=0.6, wait=2)
             tap_on_template("Home.Store", wait=2)

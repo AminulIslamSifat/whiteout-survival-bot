@@ -65,12 +65,12 @@ The bot operates on a **Research → Strategy → Execution** loop:
 
 ## ⚠️ ATTENTION: Resolution Lock ⚠️
 
-> **🔴 CRITICAL:** This bot is hardcoded for **1080×2460 resolution**.
+> **🔴 CRITICAL:** The bot now uses **percentage-based coordinates** internally and converts to device pixels only at the ADB edge.
 
 **If your device uses a different resolution:**
-- ❌ ROI detection will fail
-- ❌ Clicks will land in incorrect locations
-- ❌ The bot may perform unintended actions
+- ✅ ROI boxes, OCR output, and template output share the same coordinate system
+- ✅ Most screen actions scale with resolution changes automatically
+- ⚠️ Screenshot capture and OCR/template matching still depend on the active device display
 
 **Verify your device resolution:**
 ```bash
@@ -79,12 +79,12 @@ adb shell wm size
 
 ### 📝 Planned Solution
 
-An **Auto-Calibration Suite** is under development. In a future release, the bot will:
-- ✅ Auto-detect your device resolution on first run
-- ✅ Execute a guided "World Tour" of all game screens
-- ✅ Dynamically generate resolution-specific coordinates in `references/TextArea/`
+An **Auto-Calibration Suite** is still planned for refining ROIs and derived thresholds. It will focus on:
+- ✅ Better first-run calibration for new resolutions and aspect ratios
+- ✅ Guided screen discovery for missed or unstable text areas
+- ✅ Automatic refresh of `references/TextArea/` when the layout changes
 
-**Status:** Coming soon
+**Status:** Partial runtime support is now in place; calibration remains a follow-up.
 
 ---
 

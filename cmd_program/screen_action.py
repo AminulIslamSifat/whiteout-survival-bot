@@ -1,22 +1,12 @@
 import os
+import re
 import cv2
 import time
 import subprocess
 import numpy as np
 
-
-# Screen dimensions for percentage calculations
-SCREEN_WIDTH = 1080
-SCREEN_HEIGHT = 2460
-
-
-def _convert_if_percentage(value, max_value):
-    """Convert value from percentage to pixel if it's a percentage (0-100)."""
-    if isinstance(value, float) and 0 <= value <= 100:
-        return int((value / 100) * max_value)
-    return int(value)
-
-
+from core.coord_utils import percent_to_pixel
+from cmd_program.resolution_utils import get_stream_resolution
 
 
 def get_adb_devices():
@@ -47,6 +37,61 @@ else:
     device_id = devices[0]
 
 
+_screen_size = None
+
+
+def _resolve_device_id(selected_device_id=None):
+    resolved = selected_device_id or device_id
+    if not resolved:
+        raise RuntimeError("No ADB device selected")
+    return resolved
+
+
+def _get_screen_size(selected_device_id=None):
+    global _screen_size
+
+    if _screen_size is not None:
+        return _screen_size
+
+    resolved_device_id = _resolve_device_id(selected_device_id)
+    result = subprocess.run(
+        ["adb", "-s", str(resolved_device_id), "shell", "wm", "size"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    match = re.search(r"Physical size:\s*(\d+)x(\d+)", result.stdout)
+    if not match:
+        raise RuntimeError(f"Unable to read screen size: {result.stdout.strip()}")
+
+    _screen_size = (int(match.group(1)), int(match.group(2)))
+    return _screen_size
+
+
+def _normalize_point_args(args):
+    if len(args) == 1:
+        if args[0] is None:
+            raise RuntimeError("Coordination not found")
+        x, y = args[0]
+    elif len(args) == 2 and not any(isinstance(arg, (tuple, list)) for arg in args):
+        x, y = args
+    else:
+        raise ValueError("Expected a point tuple or x/y values")
+
+    return float(x), float(y)
+
+
+def _normalize_swipe_args(args):
+    if len(args) == 2 and all(isinstance(arg, (tuple, list)) for arg in args):
+        (x1, y1), (x2, y2) = args
+    elif len(args) == 4 and not any(isinstance(arg, (tuple, list)) for arg in args):
+        x1, y1, x2, y2 = args
+    else:
+        raise ValueError("Expected two points or four coordinate values")
+
+    return float(x1), float(y1), float(x2), float(y2)
+
+
 
 def run_adb_command(cmd, device_id):
     #running the adb command and chekcing if the adb is available or not
@@ -57,65 +102,74 @@ def run_adb_command(cmd, device_id):
 
 
 
-def tap_screen(*args):
-    # Handling both tuple and normal x,y coordination and converting them to string
-    # Used default device_id so that it won't cause problem when multiple device is connected
-    if len(args) == 1:
-        if args[0] == None:
-            raise RuntimeError("Coordination not found")
-        x, y = args[0]
-    elif len(args)==2:
-        x, y = args
-    else:
-        raise ValueError
+def tap_screen(*args, coord=False):
+    """
+    Tap screen at given coordinates.
     
-    # Convert percentage to pixels if needed
-    x = _convert_if_percentage(x, SCREEN_WIDTH)
-    y = _convert_if_percentage(y, SCREEN_HEIGHT)
+    Args:
+        *args: Either (x, y) or (point_tuple)
+        coord: If False, coordinates are percentages and will be converted to pixels.
+               If True, coordinates are already in pixels.
+    """
+    x, y = _normalize_point_args(args)
     
-    adb_command = ["shell", "input", "tap", str(x), str(y)]
-    run_adb_command(adb_command, device_id)
+    if not coord:
+        # Convert from percentage to pixel coordinates
+        screen_width, screen_height = _get_screen_size()
+        x, y = percent_to_pixel(x, y, screen_width, screen_height)
+    
+    # At this point, x and y are always pixels
+    adb_command = ["shell", "input", "tap", str(int(x)), str(int(y))]
+    run_adb_command(adb_command, _resolve_device_id())
 
 
 
-def swipe_screen(*args, duration=300):
-    if len(args) == 2:
-        (x1, y1), (x2, y2) = args
-    elif len(args) == 4:
-        x1, y1, x2, y2 = args
-    else:
-        raise ValueError
+def swipe_screen(*args, duration=300, coord=False):
+    """
+    Swipe screen from one location to another.
     
-    # Convert percentage to pixels if needed
-    x1 = _convert_if_percentage(x1, SCREEN_WIDTH)
-    y1 = _convert_if_percentage(y1, SCREEN_HEIGHT)
-    x2 = _convert_if_percentage(x2, SCREEN_WIDTH)
-    y2 = _convert_if_percentage(y2, SCREEN_HEIGHT)
+    Args:
+        *args: Either ((x1, y1), (x2, y2)) or (x1, y1, x2, y2)
+        duration: Duration of swipe in milliseconds
+        coord: If False, coordinates are percentages and will be converted to pixels.
+               If True, coordinates are already in pixels.
+    """
+    x1, y1, x2, y2 = _normalize_swipe_args(args)
     
+    if not coord:
+        # Convert from percentage to pixel coordinates
+        screen_width, screen_height = _get_screen_size()
+        x1, y1 = percent_to_pixel(x1, y1, screen_width, screen_height)
+        x2, y2 = percent_to_pixel(x2, y2, screen_width, screen_height)
+    
+    # At this point, all coordinates are in pixels
     duration = str(duration)
-
-    adb_command = ["shell", "input", "swipe", str(x1), str(y1), str(x2), str(y2), str(duration)]
-    run_adb_command(adb_command, device_id)
-
+    adb_command = ["shell", "input", "swipe", str(int(x1)), str(int(y1)), str(int(x2)), str(int(y2)), str(duration)]
+    run_adb_command(adb_command, _resolve_device_id())
 
 
-def long_press(*args, duration=300):
-    # in case of long press, its similar to swipe while the starting and ending location is the same
-    if len(args) == 1:
-        x, y = args[0]
-    elif len(args)==2:
-        x, y = args
-    else:
-        raise ValueError
+
+def long_press(*args, duration=300, coord=False):
+    """
+    Long press at given coordinates (implemented as a zero-distance swipe).
     
-    # Convert percentage to pixels if needed
-    x = _convert_if_percentage(x, SCREEN_WIDTH)
-    y = _convert_if_percentage(y, SCREEN_HEIGHT)
+    Args:
+        *args: Either (x, y) or (point_tuple)
+        duration: Duration of press in milliseconds
+        coord: If False, coordinates are percentages and will be converted to pixels.
+               If True, coordinates are already in pixels.
+    """
+    x, y = _normalize_point_args(args)
     
+    if not coord:
+        # Convert from percentage to pixel coordinates
+        screen_width, screen_height = _get_screen_size()
+        x, y = percent_to_pixel(x, y, screen_width, screen_height)
+    
+    # At this point, x and y are always pixels
     duration = str(duration)
-
-    adb_command = ["shell", "input", "swipe", str(x), str(y), str(x), str(y), str(duration)]
-    run_adb_command(adb_command, device_id)
+    adb_command = ["shell", "input", "swipe", str(int(x)), str(int(y)), str(int(x)), str(int(y)), str(duration)]
+    run_adb_command(adb_command, _resolve_device_id())
 
 
 
@@ -139,19 +193,21 @@ def take_screenshot(save=False):
 
 
 
-def clear_input(count=6):
-    run_adb_command(["shell", "input", "keyevent", "123"], device_id)
+def clear_input(count=6, device_id=None):
+    resolved_device_id = _resolve_device_id(device_id)
+    run_adb_command(["shell", "input", "keyevent", "123"], resolved_device_id)
 
     for i in range(count):
-        run_adb_command(["shell", "input", "keyevent", "67"], device_id)
+        run_adb_command(["shell", "input", "keyevent", "67"], resolved_device_id)
 
 
 
-def input_text(text, device_id="131393852O003802", backspace=6):
+def input_text(text, device_id=None, backspace=6):
     text = text.replace(" ", "%s")
 
     adb_command = ["shell", "input", "text", text]
-    clear_input(count=backspace, device_id=device_id)
-    run_adb_command(adb_command, device_id)
-    run_adb_command(["shell", "input", "keyevent", "66"], device_id=device_id)
+    resolved_device_id = _resolve_device_id(device_id)
+    clear_input(count=backspace, device_id=resolved_device_id)
+    run_adb_command(adb_command, resolved_device_id)
+    run_adb_command(["shell", "input", "keyevent", "66"], device_id=resolved_device_id)
     print(f"Text Input: {text}")

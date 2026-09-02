@@ -1,0 +1,363 @@
+"""
+WOS-Bot Dashboard Server
+FastAPI backend providing REST API + SSE log streaming for the bot.
+"""
+
+import asyncio
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+DB_DIR = PROJECT_ROOT / "db"
+ACCOUNT_FILE = DB_DIR / "account.json"
+COMPLETION_LOG = DB_DIR / "completion_log.txt"
+
+app = FastAPI(title="WOS-Bot Dashboard", version="0.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Bot Process State ---
+_bot_process: Optional[subprocess.Popen] = None
+_log_lines: list[str] = []
+_log_listeners: list[asyncio.Queue] = []
+_bot_status: str = "stopped"  # stopped | starting | running | stopping
+_current_task: str = ""
+_current_player: str = ""
+_selected_tasks: list[str] = []
+
+MAX_LOG_LINES = 500
+
+
+# --- Models ---
+class TaskSelection(BaseModel):
+    tasks: list[str]
+
+
+class AccountUpdate(BaseModel):
+    email: str
+    priority: int
+    players: list[dict]
+
+
+# --- Helpers ---
+def _load_accounts() -> dict:
+    if not ACCOUNT_FILE.exists():
+        return {}
+    with open(ACCOUNT_FILE) as f:
+        return json.load(f)
+
+
+def _save_accounts(data: dict):
+    with open(ACCOUNT_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+def _load_completion_log() -> list[dict]:
+    records = []
+    if not COMPLETION_LOG.exists():
+        return records
+    with open(COMPLETION_LOG) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split("|")
+            if len(parts) < 3:
+                continue
+            records.append({
+                "player_id": parts[0].strip(),
+                "timestamp": float(parts[1].strip()),
+                "datetime": parts[2].strip(),
+            })
+    return records
+
+
+def _get_available_tasks() -> list[dict]:
+    """Return available tasks by importing TaskSpec from task_menu."""
+    # We read the TASKS list structure without importing (to avoid side effects)
+    # Instead, we maintain a parallel list here that mirrors task_menu.TASKS
+    return [
+        {"key": "vip", "title": "VIP Rewards", "description": "Collect VIP rewards before anything else."},
+        {"key": "exploration_idle", "title": "Exploration Idle Income", "description": "Claim passive exploration income."},
+        {"key": "exploration_continue", "title": "Continue Exploring", "description": "Resume exploration progress."},
+        {"key": "mail", "title": "Mail Rewards", "description": "Collect mailbox rewards."},
+        {"key": "life_essence", "title": "Life Essence", "description": "Collect life essence."},
+        {"key": "training", "title": "Train Troops", "description": "Run the troop training routine."},
+        {"key": "arena", "title": "Arena", "description": "Enter the arena routine."},
+        {"key": "chief_order", "title": "Chief Order", "description": "Activate chief order tasks."},
+        {"key": "pet_treasure", "title": "Ally Treasure", "description": "Collect ally treasure."},
+        {"key": "pet_exploration", "title": "Pet Exploration", "description": "Start pet exploration."},
+        {"key": "labyrinth", "title": "Labyrinth", "description": "Run the labyrinth routine."},
+        {"key": "alliance_join", "title": "Alliance Auto Join", "description": "Auto-join alliance activity."},
+        {"key": "alliance_chests", "title": "Alliance Chests", "description": "Collect alliance chests."},
+        {"key": "alliance_tech", "title": "Alliance Tech", "description": "Contribute to alliance tech."},
+        {"key": "alliance_help", "title": "Alliance Help", "description": "Send alliance help."},
+        {"key": "alliance_triumph", "title": "Alliance Triumph", "description": "Collect triumph rewards."},
+        {"key": "heal", "title": "Heal", "description": "Run healing workflow."},
+        {"key": "gather", "title": "World Gather", "description": "Gather resources with current character rules."},
+        {"key": "missions", "title": "Missions Reward", "description": "Collect mission rewards."},
+    ]
+
+
+async def _broadcast_log(line: str):
+    """Send log line to all SSE listeners."""
+    dead = []
+    for q in _log_listeners:
+        try:
+            q.put_nowait(line)
+        except asyncio.QueueFull:
+            dead.append(q)
+    for q in dead:
+        _log_listeners.remove(q)
+
+
+def _parse_bot_output(line: str):
+    """Parse bot stdout for status updates."""
+    global _current_task, _current_player
+
+    line_lower = line.lower()
+
+    if "running tasks for:" in line_lower:
+        _current_player = line.split("Running tasks for:")[-1].strip()
+    elif "running" in line_lower and any(t["title"].lower() in line_lower for t in _get_available_tasks()):
+        for t in _get_available_tasks():
+            if t["title"].lower() in line_lower:
+                _current_task = t["title"]
+                break
+    elif "marked completed:" in line_lower:
+        _current_task = "Completed"
+    elif "skipping" in line_lower:
+        _current_player = line.split("Skipping")[-1].split("-")[0].strip()
+        _current_task = "Skipped"
+
+
+async def _read_bot_stream(process: subprocess.Popen):
+    """Read bot process stdout line by line."""
+    global _bot_status
+    loop = asyncio.get_event_loop()
+
+    while True:
+        line = await loop.run_in_executor(None, process.stdout.readline)
+        if not line:
+            break
+        text = line.decode("utf-8", errors="replace").rstrip()
+        if text:
+            _log_lines.append(text)
+            if len(_log_lines) > MAX_LOG_LINES:
+                _log_lines.pop(0)
+            _parse_bot_output(text)
+            await _broadcast_log(text)
+
+    process.wait()
+    _bot_status = "stopped"
+    _current_task = ""
+    _current_player = ""
+    await _broadcast_log("[Dashboard] Bot process exited.")
+
+
+# --- API Routes ---
+
+@app.get("/api/status")
+async def get_status():
+    return {
+        "status": _bot_status,
+        "current_player": _current_player,
+        "current_task": _current_task,
+        "selected_tasks": _selected_tasks,
+        "uptime": time.time() if _bot_status == "running" else None,
+    }
+
+
+@app.get("/api/tasks")
+async def get_tasks():
+    return _get_available_tasks()
+
+
+@app.post("/api/bot/start")
+async def start_bot(selection: TaskSelection):
+    global _bot_process, _bot_status, _selected_tasks, _log_lines
+
+    if _bot_status in ("running", "starting"):
+        raise HTTPException(400, "Bot is already running")
+
+    if not selection.tasks:
+        raise HTTPException(400, "No tasks selected")
+
+    _selected_tasks = selection.tasks
+    _log_lines.clear()
+    _bot_status = "starting"
+
+    # Build task input string for the bot's stdin
+    task_input = ",".join(selection.tasks) + "\n"
+
+    try:
+        _bot_process = subprocess.Popen(
+            [sys.executable, str(PROJECT_ROOT / "Main" / "main.py")],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            cwd=str(PROJECT_ROOT),
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        )
+
+        # Send task selection to bot's stdin
+        _bot_process.stdin.write(task_input.encode())
+        _bot_process.stdin.flush()
+        _bot_process.stdin.close()
+
+        _bot_status = "running"
+        asyncio.create_task(_read_bot_stream(_bot_process))
+        await _broadcast_log(f"[Dashboard] Bot started with tasks: {', '.join(selection.tasks)}")
+
+        return {"status": "started", "tasks": selection.tasks}
+
+    except Exception as e:
+        _bot_status = "stopped"
+        raise HTTPException(500, f"Failed to start bot: {e}")
+
+
+@app.post("/api/bot/stop")
+async def stop_bot():
+    global _bot_process, _bot_status
+
+    if _bot_status != "running":
+        raise HTTPException(400, "Bot is not running")
+
+    _bot_status = "stopping"
+    await _broadcast_log("[Dashboard] Stopping bot...")
+
+    if _bot_process and _bot_process.poll() is None:
+        _bot_process.terminate()
+        try:
+            _bot_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            _bot_process.kill()
+
+    _bot_process = None
+    _bot_status = "stopped"
+    _current_task = ""
+    _current_player = ""
+    await _broadcast_log("[Dashboard] Bot stopped.")
+    return {"status": "stopped"}
+
+
+@app.get("/api/logs")
+async def get_logs():
+    return {"lines": _log_lines[-200:]}
+
+
+@app.get("/api/logs/stream")
+async def stream_logs():
+    async def event_generator():
+        queue = asyncio.Queue(maxsize=100)
+        _log_listeners.append(queue)
+        try:
+            # Send recent history first
+            for line in _log_lines[-50:]:
+                yield f"data: {json.dumps({'line': line})}\n\n"
+            # Stream new lines
+            while True:
+                line = await queue.get()
+                yield f"data: {json.dumps({'line': line})}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if queue in _log_listeners:
+                _log_listeners.remove(queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.get("/api/accounts")
+async def get_accounts():
+    data = _load_accounts()
+    accounts = []
+    for email, info in sorted(data.items(), key=lambda x: x[1].get("priority", 999)):
+        accounts.append({
+            "email": email,
+            "priority": info.get("priority", 999),
+            "players": info.get("player", []),
+        })
+    return accounts
+
+
+@app.put("/api/accounts/{email:path}")
+async def update_account(email: str, update: AccountUpdate):
+    data = _load_accounts()
+    data[email] = {
+        "priority": update.priority,
+        "player": update.players,
+    }
+    _save_accounts(data)
+    return {"status": "updated", "email": email}
+
+
+@app.delete("/api/accounts/{email:path}")
+async def delete_account(email: str):
+    data = _load_accounts()
+    if email not in data:
+        raise HTTPException(404, "Account not found")
+    del data[email]
+    _save_accounts(data)
+    return {"status": "deleted", "email": email}
+
+
+@app.get("/api/completion")
+async def get_completion():
+    records = _load_completion_log()
+    accounts = _load_accounts()
+
+    # Build player name lookup
+    player_names = {}
+    for email, info in accounts.items():
+        for p in info.get("player", []):
+            player_names[p["id"]] = {"name": p["name"], "email": email}
+
+    result = []
+    for r in records:
+        pid = r["player_id"]
+        info = player_names.get(pid, {})
+        age_hours = (time.time() - r["timestamp"]) / 3600
+        result.append({
+            "player_id": pid,
+            "player_name": info.get("name", "Unknown"),
+            "email": info.get("email", "Unknown"),
+            "last_completed": r["datetime"],
+            "hours_ago": round(age_hours, 1),
+            "in_cooldown": age_hours < 3.0,
+        })
+
+    return sorted(result, key=lambda x: x["hours_ago"])
+
+
+# --- Static Files ---
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/")
+async def index():
+    return FileResponse(str(STATIC_DIR / "index.html"))
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)

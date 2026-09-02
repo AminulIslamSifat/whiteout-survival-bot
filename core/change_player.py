@@ -11,6 +11,9 @@ from cmd_program.screen_action import(
     swipe_screen
 )
 from core.recalibrate import recalibrate
+from rapidfuzz import fuzz
+# use dynamic percentage taps; do not convert to pixels here
+
 
 
 
@@ -53,21 +56,38 @@ def change_character(next_name):
     tap_on_text("ChiefProfile.Settings", wait=1)
     tap_on_text("ChiefProfile.Settings.Characters", wait=2)
     time.sleep(1)
-    players = req_text(
-        ["ChiefProfile.Settings.Characters.FirstCharacterName",
-        "ChiefProfile.Settings.Characters.SecondCharacterName"]
-    )
-    names = [player[0].split(']')[1].lower() for player in players]
-    if next_name.lower() not in names:
-        print("Character not found, Exiting...")
-        return None
-    index = names.index(next_name.lower())
-    status = tap_on_text(players[index][0], rois=[0, 40.65, 100, 59.02])
-    
-    if not status:
-        print("Finding player failed")
+    players = req_text()
+    names = []
+    for player in players:
+        try:
+            name = player[0].split(']')[1].lower()
+        except Exception:
+            name = player[0].lower()
+        names.append(name)
+
+    # normalize names: if `next_name` appears inside a detected name, strip everything bfore it
+    target = next_name.lower().strip()
+    players_match_value = {}
+    for idx, name in enumerate(names):
+        proc_name = name
+        pos = name.find(target)
+        if pos != -1:
+            proc_name = name[pos:]
+        # compute fuzzy ratio against the processed name
+        r = fuzz.ratio(target, proc_name)
+        players_match_value[idx] = r
+
+    threshold = 70  # corresponds to 0.7 similarity
+    candidates = [(idx, score) for idx, score in players_match_value.items() if score >= threshold]
+    if not candidates:
+        print("No matching player found with sufficient similarity, Exiting...")
         return None
 
+    best_idx, best_score = max(candidates, key=lambda x: x[1])
+    box = players[best_idx][1]
+    coord = ((box[0] + box[2]) // 2, (box[1] + box[3]) // 2)
+    tap_screen(coord, coord=True)
+    
     tap_on_text("ChiefProfile.Settings.Characters.Login.Confirm", wait=2, sleep=2)
     recalibrate(timeout=80)
     return True

@@ -1,7 +1,12 @@
 import os
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+workspace_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if workspace_root not in sys.path:
+    sys.path.insert(0, workspace_root)
+elif sys.path[0] != workspace_root:
+    sys.path.remove(workspace_root)
+    sys.path.insert(0, workspace_root)
 
 # Disable remote model source probing during PaddleOCR init to avoid startup delays.
 os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
@@ -36,6 +41,7 @@ from concurrent.futures import ThreadPoolExecutor
 from cmd_program.screen_action import take_screenshot
 from cmd_program.screen_stream import screen_capture as stream_screen_capture
 from cmd_program.screen_stream import start_screen_stream, setup_v4l2loopback
+from cmd_program.resolution_utils import get_stream_resolution, reset_resolution_cache
 import paddleocr
 
 
@@ -82,8 +88,11 @@ CPU_THREADS = min(os.cpu_count() or 1, 4)
 TEMPLATE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "references", "icon"))
 RAM_CAP_GB = float(os.getenv("OCR_RAM_CAP_GB", "3.0"))
 RAM_CAP_BYTES = int(RAM_CAP_GB * 1024 * 1024 * 1024)
-STREAM_WIDTH = 1080
-STREAM_HEIGHT = 2456
+
+# Dynamic stream resolution - will be initialized at startup
+STREAM_WIDTH = 1080   # Default fallback
+STREAM_HEIGHT = 2456  # Default fallback
+
 STREAM_TIMEOUT_S = 2.0
 STREAM_RETRY_COOLDOWN_S = 3.0
 STREAM_SUDO_RETRY_COOLDOWN_S = 120.0
@@ -363,6 +372,29 @@ def _get_cached_image(session_id):
 
 
 #----------------------- Functions -------------------------------#
+
+def _init_stream_resolution():
+    """
+    Initialize dynamic stream resolution from the connected device.
+    Applies scrcpy quirk correction (6-pixel reduction in larger value).
+    Falls back to defaults if detection fails.
+    """
+    global STREAM_WIDTH, STREAM_HEIGHT
+    
+    try:
+        from cmd_program.screen_action import device_id
+        if device_id:
+            width, height = get_stream_resolution(device_id, apply_scrcpy_quirk=True)
+            STREAM_WIDTH = width
+            STREAM_HEIGHT = height
+            console.print(f"[bold green]✅ Dynamic Stream Resolution:[/bold green] {STREAM_WIDTH}×{STREAM_HEIGHT}")
+            return
+    except Exception as e:
+        console.print(f"[bold yellow]⚠️ Could not detect stream resolution:[/bold yellow] {e}")
+    
+    console.print(f"[bold yellow]⚠️ Using fallback resolution:[/bold yellow] {STREAM_WIDTH}×{STREAM_HEIGHT}")
+
+
 def init_services():
     global ocr, _template_cache
 
@@ -846,6 +878,7 @@ def _clear_session_cache(req:ClearCacheRequest):
 
 
 take_preferred_screen_capture_tool()
+_init_stream_resolution()
 init_services()
 
 if __name__ == "__main__":

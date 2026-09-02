@@ -15,6 +15,7 @@ from cmd_program.screen_action import(
     swipe_screen,
     input_text
 )
+from core.coord_utils import pct_to_px
 
 
 
@@ -71,7 +72,7 @@ def find_arena():
             swipe_screen(50.93, 56.91, 50.93, 38.21, duration=1500)
             time.sleep(0.5)
             continue
-        status = tap_on_closest_text(base, target, rois=[missions_area], wait=2, maximum_distance=600)
+        status = tap_on_closest_text(base, target, rois=[missions_area], wait=2, maximum_distance=24.39)
         if status:
             return status
     return False

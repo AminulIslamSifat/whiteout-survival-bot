@@ -60,10 +60,16 @@ def recalibrate(timeout=30):
         ]
         res = req_ocr()
         for item in res:
+            box = item["box"]
+            if item["text"].lower() == "world":
+                found = True
+                is_home = True
             if item["text"] in targets:
                 box = item["box"]
+                print(box)
+                # OCR returns coordinates in pixels
                 coord = ((box[0]+box[2])//2, (box[1]+box[3])//2)
-                tap_screen(coord)
+                tap_screen(coord, coord=True)
                 found = True
 
         if not found:

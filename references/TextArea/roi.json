@@ -38,5 +38,15 @@
             100.0,
             85.37
         ]
+    },
+     "World.Search.ItemBox": {
+        "text": null,
+        "score": null,
+        "box": [
+            0.0,
+            78.86,
+            100.0,
+            80.49
+        ]
     }
 }

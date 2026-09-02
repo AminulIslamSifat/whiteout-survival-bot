@@ -14,6 +14,7 @@ from cmd_program.screen_action import(
     swipe_screen,
     input_text
 )
+# use percentages directly; screen_action will convert per-device
 
 
 

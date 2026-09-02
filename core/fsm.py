@@ -150,7 +150,10 @@ class GameFSM:
                 success = tap_on_template(transition["target"], wait=3)
             elif transition["action"] == "coord":
                 from cmd_program.screen_action import tap_screen
-                tap_screen(transition["target"])
+                from core.coord_utils import pct_to_px
+                # transition["target"] is in percentages; convert to pixels
+                pixel_coord = (transition["target"][0], transition["target"][1])
+                tap_screen(pixel_coord, coord=True)
                 success = True
             
             if not success:

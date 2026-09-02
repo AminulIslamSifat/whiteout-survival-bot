@@ -25,8 +25,13 @@ data_dict = {}
 
 data = req_ocr(save_result=True)
 for d in data:
-    print(f"{d['text']} ----- {d['score']} ---- {d['box']}")
+    box = d["box"]
+    box[0], box[1], box[2], box[3] = box[0]/1080, box[1]/2460, box[2]/1080, box[3]/2460
+    box = [round(b, 2) for b in box]
+
+    print(f"{d['text']} ----- {d['score']} ---- {box}")
 for i,d in enumerate(data):
+    d["box"] = box
     data_dict[f"Home.Labyrinth.Challenge.Defeat.{i}"] = d
 
 

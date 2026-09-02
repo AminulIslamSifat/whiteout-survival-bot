@@ -119,32 +119,29 @@ def match_template(name, img = None, threshold=0.8, save_result=None, rois=None,
 
 
 
-print(os.cpu_count())
+# print(os.cpu_count())
 
-for i in range(1):
-    t1 = time.time()
-    # for i in range(10):
-    #     swipe_screen(100, 1600, 1080, 1400)
-    #     time.sleep(0.5)
-    # for i in range(4):
-    #     swipe_screen(800, 1455, 100, 1868)
-    #     time.sleep(1)
-    #     status = tap_on_template("Home.Labyrinth1", wait=2, threshold=0.5)
-    #     if status:
-    #         break
-    r = req_ocr(rois=[
-        [
-            830,
-            2034,
-            1030,
-            2061
-        ]
-    ], save_result=True)
-    print(r)
-    t2 = time.time()
-    #img = take_screenshot(save=True)
-    print(t2 - t1)
+# for i in range(1):
+#     t1 = time.time()
+#     # for i in range(10):
+#     #     swipe_screen(100, 1600, 1080, 1400)
+#     #     time.sleep(0.5)
+#     # for i in range(4):
+#     #     swipe_screen(800, 1455, 100, 1868)
+#     #     time.sleep(1)
+#     #     status = tap_on_template("Home.Labyrinth1", wait=2, threshold=0.5)
+#     #     if status:
+#     #         break
+#     r = req_ocr(rois=[
+#         [
+#             830,
+#             2034,
+#             1030,
+#             2061
+#         ]
+#     ], save_result=True)
+#     print(r)
+#     t2 = time.time()
+#     #img = take_screenshot(save=True)
+#     print(t2 - t1)
 
-
-
-tap_on_text("click to continue", wait=2, align=[0, -400])

@@ -15,6 +15,7 @@ from cmd_program.screen_action import(
     swipe_screen,
     input_text
 )
+# use percentage taps directly
 
 
 

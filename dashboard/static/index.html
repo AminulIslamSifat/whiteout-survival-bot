@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WOS-Bot Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-brand">
+                <span class="brand-icon">❄️</span>
+                <span class="brand-text">WOS-Bot</span>
+            </div>
+            <div class="nav-items">
+                <button class="nav-item active" data-view="dashboard">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-view="tasks">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                    <span>Tasks</span>
+                </button>
+                <button class="nav-item" data-view="accounts">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                    <span>Accounts</span>
+                </button>
+                <button class="nav-item" data-view="logs">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <span>Logs</span>
+                </button>
+            </div>
+            <div class="sidebar-footer">
+                <div class="bot-status-mini" id="sidebarStatus">
+                    <span class="status-dot stopped"></span>
+                    <span class="status-label">Stopped</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="content">
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view active">
+                <header class="view-header">
+                    <h1>Dashboard</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" id="btnStartBot">▶ Start Bot</button>
+                        <button class="btn btn-danger" id="btnStopBot" disabled>■ Stop</button>
+                    </div>
+                </header>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Bot Status</div>
+                        <div class="stat-value" id="statStatus">
+                            <span class="status-dot stopped"></span> Stopped
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Current Player</div>
+                        <div class="stat-value" id="statPlayer">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Current Task</div>
+                        <div class="stat-value" id="statTask">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Total Accounts</div>
+                        <div class="stat-value" id="statAccounts">0</div>
+                    </div>
+                </div>
+
+                <div class="panel-row">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Completion Status</h2>
+                            <button class="btn-icon" onclick="refreshCompletion()" title="Refresh">↻</button>
+                        </div>
+                        <div class="panel-body">
+                            <table class="data-table" id="completionTable">
+                                <thead>
+                                    <tr>
+                                        <th>Player</th>
+                                        <th>Account</th>
+                                        <th>Last Run</th>
+                                        <th>Ago</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Live Log</h2>
+                            <button class="btn-icon" onclick="clearLogView()" title="Clear">✕</button>
+                        </div>
+                        <div class="panel-body log-container" id="dashLogContainer">
+                            <div class="log-lines" id="dashLogLines"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tasks View -->
+            <section id="view-tasks" class="view">
+                <header class="view-header">
+                    <h1>Task Selection</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" id="btnSelectAll">Select All</button>
+                        <button class="btn btn-secondary" id="btnDeselectAll">Deselect All</button>
+                        <button class="btn btn-primary" id="btnStartWithTasks">▶ Start with Selected</button>
+                    </div>
+                </header>
+                <div class="task-grid" id="taskGrid"></div>
+            </section>
+
+            <!-- Accounts View -->
+            <section id="view-accounts" class="view">
+                <header class="view-header">
+                    <h1>Accounts</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="refreshAccounts()">↻ Refresh</button>
+                    </div>
+                </header>
+                <div class="accounts-list" id="accountsList"></div>
+            </section>
+
+            <!-- Logs View -->
+            <section id="view-logs" class="view">
+                <header class="view-header">
+                    <h1>Full Log</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="clearLogView()">Clear</button>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="autoScrollToggle" checked> Auto-scroll
+                        </label>
+                    </div>
+                </header>
+                <div class="log-container full-log" id="fullLogContainer">
+                    <div class="log-lines" id="fullLogLines"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Task Selection Modal -->
+    <div class="modal-overlay" id="taskModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Select Tasks</h2>
+                <button class="btn-icon" onclick="closeTaskModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="task-grid compact" id="modalTaskGrid"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeTaskModal()">Cancel</button>
+                <button class="btn btn-primary" id="btnConfirmStart">Start Bot</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

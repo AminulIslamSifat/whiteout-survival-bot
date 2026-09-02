@@ -31,7 +31,8 @@ def heal():
         recalibrate()
         tap_on_text("Home.World", wait=2)
 
-    status = tap_on_template("World.Heal", wait=2)
+    time.sleep(1)
+    status = tap_on_template("World.Heal", wait=3)
     if status:
         tap_on_text("World.Heal.QuickSelect")
         tap_on_text("World.Heal.Heal", wait=2)

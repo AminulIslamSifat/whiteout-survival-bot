@@ -51,3 +51,76 @@
         ]
     }
 }
+
+
+
+
+{
+    "aminulislamsifat19@gmail.com" : {
+        "priority": 1,
+        "player" : [
+            {
+                "name" : "shadow",
+                "id" : "578380047"
+            },
+            {
+                "name" : "shadowy",
+                "id" : "588462952"
+            }
+        ]
+    },
+
+    "aminulislamsifat5@gmail.com" : {
+        "priority": 2,
+        "player" : [
+            {
+                "name" : "The Fool",
+                "id" : "581237326"
+            },
+            {
+                "name" : "Justice",
+                "id" : "653288400"
+            }
+        ]
+    },
+
+    "darkdevil1996120@gmail.com" : {
+        "priority": 3,
+        "player" : [
+            {
+                "name" : "The Magician",
+                "id" : "662244367"
+            }
+        ]
+    },
+
+    "ais.wos.001@gmail.com" : {
+        "priority": 4,
+        "player" : [
+            {
+                "name" : "Death",
+                "id" : "662566035"
+            }
+        ]
+    },
+
+    "ais.wos.0002@gmail.com" : {
+        "priority": 5,
+        "player" : [
+            {
+                "name" : "Judgement",
+                "id" : "702877045"
+            }
+        ]
+    },
+
+    "aminul.i.sifat@gmail.com" : {
+        "priority": 6,
+        "player" : [
+            {
+                "name" : "The Moon",
+                "id" : "660113040"
+            }
+        ]
+    }
+}

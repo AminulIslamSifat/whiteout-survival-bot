@@ -14,6 +14,7 @@ from cmd_program.screen_action import(
     swipe_screen,
     input_text
 )
+# use percentages directly; let screen_action convert per-device
 
 
 side_panel = [0, 28.05, 62.04, 67.07]
@@ -36,9 +37,10 @@ def train():
         print("Error finding side panel, Exiting the task")
         return None
     
-    for i in range(3):
+    for _ in range(3):
         tap_screen(50, 48.78)
         time.sleep(0.3)
+
     tap_on_text("Train", rois = [training_menu], wait=2, sleep=0.5)
     title = req_text("Home.TroopTraining.Title")
 
@@ -163,12 +165,12 @@ def train_marksman(Amount=None):
 
     tap_on_text("Marksman", rois=[side_panel], wait=2)
     for i in range(3):
-        tap_screen(540, 1200)
+        tap_screen(50, 48.78)
         time.sleep(0.3)
     tap_on_text("Train", rois = [training_menu], wait=2)
 
-    tap_screen(550, 1100)            #Taping at the middle of the screen to remove the tutorial hand icon
-    traned = 0
+    tap_screen(50.93, 44.72)            #Taping at the middle of the screen to remove the tutorial hand icon
+    trained = 0
 
     while(trained < Amount):
         time.sleep(0.5)

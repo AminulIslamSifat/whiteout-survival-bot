@@ -13,6 +13,7 @@ from cmd_program.screen_action import(
     tap_screen,
     swipe_screen
 )
+from core.coord_utils import pct_to_px
 
 
 
@@ -127,7 +128,7 @@ def collect_triumph():
         activity_points = text[0][0].split("/")
         activity_points  = [int(a.replace(",", "")) for a in activity_points]
         if activity_points[0] > activity_points[1]:
-            tap_on_text(text[0][0], align=[0, -30])
+            tap_on_text(text[0][0], align=[0, -1.22])
     except Exception as e:
         print(f"Reading Error - {e}")
 

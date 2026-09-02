@@ -14,6 +14,7 @@ from cmd_program.screen_action import(
     swipe_screen,
     input_text
 )
+# use percentage taps so screen_action handles conversion
 
 def collect_ally_treasure():
     recalibrate()
@@ -22,7 +23,7 @@ def collect_ally_treasure():
         return None
     tap_on_text("Home.Pet.Skill.BeastCage", sleep=1, wait=2)
     tap_on_text("Home.Pet.BeastCage.Adventure", wait=2)
-    tap_on_text("Home.Pet.BeastCage.Adventure.AllyTreasure", wait=2, align=[0, -50])
+    tap_on_text("Home.Pet.BeastCage.Adventure.AllyTreasure", wait=2, align=[0, -2.03])
     tap_on_text("Home.Pet.BeastCage.Adventure.AllyTreasure.AllianceShares", wait=2, sleep=0.5)
     tap_on_text("Home.Pet.BeastCage.Adventure.AllyTreasure.AllianceShares.ClaimAll", wait=2)
     tap_on_text("Tap anywhere to exit", sleep=1)
@@ -107,14 +108,15 @@ def start_pet_exploration():
             valid = True
             for t in text:
                 d = distance(center(box["box"]), center(t[1]))
-                if d < 200:
+                if d < 8.13:
                     valid = False
             if valid:
                 treasures.append(box)
 
         for treasure in treasures:
             treasure = center(treasure["box"])
-            tap_screen(treasure)
+            # treasure center is in pixels (from template matching)
+            tap_screen(treasure, coord=True)
             time.sleep(0.5)
 
             status = tap_on_text("Home.Pet.BeastCage.Adventure.Treasure.InAdventure", wait=2, tap=False)
