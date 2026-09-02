@@ -17,4 +17,4 @@ print(f"❄️  Starting WOS-Bot Dashboard on http://localhost:{port}")
 import uvicorn
 from dashboard.server import app
 
-uvicorn.run(app, host="0.0.0.0", port=port)
+uvicorn.run(app, host="0.0.0.0", port=port, timeout_graceful_shutdown=1)
