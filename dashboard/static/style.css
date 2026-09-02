@@ -1038,6 +1038,35 @@ select.form-input {
 .debug-result-score { color: var(--ok); font-weight: 600; white-space: nowrap; }
 .debug-result-box { color: var(--muted); font-size: 11px; white-space: nowrap; }
 
+.debug-ocr-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sp-4) var(--sp-5);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: var(--sp-5);
+}
+
+.debug-ocr-status {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.debug-ocr-actions {
+    display: flex;
+    gap: var(--sp-3);
+}
+
+.btn-sm {
+    padding: var(--sp-2) var(--sp-4);
+    font-size: 12px;
+}
+
 .debug-coord-preview {
     padding: var(--sp-4);
     background: var(--panel-2);

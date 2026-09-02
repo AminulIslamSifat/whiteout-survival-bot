@@ -1,0 +1,20 @@
+# WOS-Bot Configuration
+# All values can be overridden via environment variables.
+
+ocr:
+  host: "127.0.0.1"
+  port: 8000
+  timeout_sec: 8.0
+  replay_wait_sec: 35.0
+  replay_backoff_start_sec: 0.35
+  replay_backoff_max_sec: 2.5
+  ram_cap_gb: 3.0
+
+scheduler:
+  skip_window_seconds: 10800   # 3 hours
+  default_task_ttl_seconds: 3600
+  max_retries_per_task: 2
+
+device:
+  preferred_device_id: null     # null = auto-detect first device
+  screenshot_ttl: 0.1

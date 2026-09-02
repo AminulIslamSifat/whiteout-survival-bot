@@ -223,6 +223,18 @@
                     </div>
                 </header>
 
+                <!-- OCR Server Status Bar -->
+                <div class="debug-ocr-bar" id="debugOcrBar">
+                    <div class="debug-ocr-status">
+                        <span class="status-dot stopped" id="dbgOcrDot"></span>
+                        <span id="dbgOcrLabel">OCR: Checking…</span>
+                    </div>
+                    <div class="debug-ocr-actions">
+                        <button class="btn btn-primary btn-sm" id="dbgOcrStart">▶ Start OCR</button>
+                        <button class="btn btn-danger btn-sm" id="dbgOcrStop" disabled>■ Stop OCR</button>
+                    </div>
+                </div>
+
                 <!-- Tool Tabs -->
                 <div class="debug-tool-tabs">
                     <button class="debug-tab active" data-tool="ocr">OCR Tester</button>

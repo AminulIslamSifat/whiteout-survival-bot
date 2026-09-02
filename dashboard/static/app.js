@@ -1235,5 +1235,86 @@ const Debug = (() => {
         return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // --- OCR Server Status ---
+    const ocrDot = document.getElementById('dbgOcrDot');
+    const ocrLabel = document.getElementById('dbgOcrLabel');
+    const ocrStartBtn = document.getElementById('dbgOcrStart');
+    const ocrStopBtn = document.getElementById('dbgOcrStop');
+    let ocrPollInterval = null;
+
+    async function pollOcrStatus() {
+        try {
+            const data = await api('/api/ocr/status');
+            const status = data.status || 'stopped';
+            updateOcrUI(status);
+        } catch (e) {
+            updateOcrUI('stopped');
+        }
+    }
+
+    function updateOcrUI(status) {
+        ocrDot.className = `status-dot ${status === 'running' ? 'running' : status === 'starting' ? 'starting' : 'stopped'}`;
+        const labels = { running: 'OCR: Running', starting: 'OCR: Starting…', stopped: 'OCR: Stopped', error: 'OCR: Error', stopping: 'OCR: Stopping…' };
+        ocrLabel.textContent = labels[status] || `OCR: ${status}`;
+
+        const isRunning = status === 'running';
+        const isStarting = status === 'starting';
+        ocrStartBtn.disabled = isRunning || isStarting;
+        ocrStopBtn.disabled = !isRunning;
+    }
+
+    ocrStartBtn.addEventListener('click', async () => {
+        try {
+            ocrStartBtn.disabled = true;
+            updateOcrUI('starting');
+            showToast('Starting OCR server...', 'info');
+            await api('/api/ocr/start', { method: 'POST' });
+            // Poll until running (up to 60s)
+            let attempts = 0;
+            const poll = setInterval(async () => {
+                attempts++;
+                try {
+                    const data = await api('/api/ocr/status');
+                    if (data.status === 'running') {
+                        clearInterval(poll);
+                        updateOcrUI('running');
+                        showToast('OCR server is ready', 'success');
+                    } else if (data.status === 'error' || attempts > 60) {
+                        clearInterval(poll);
+                        updateOcrUI(data.status || 'error');
+                        showToast('OCR server failed to start', 'error');
+                    }
+                } catch { /* keep polling */ }
+            }, 1000);
+        } catch (e) {
+            updateOcrUI('error');
+            showToast(`OCR start failed: ${e.message}`, 'error');
+        }
+    });
+
+    ocrStopBtn.addEventListener('click', async () => {
+        try {
+            ocrStopBtn.disabled = true;
+            showToast('Stopping OCR server...', 'info');
+            await api('/api/ocr/stop', { method: 'POST' });
+            updateOcrUI('stopped');
+            showToast('OCR server stopped', 'success');
+        } catch (e) {
+            showToast(`OCR stop failed: ${e.message}`, 'error');
+            pollOcrStatus();
+        }
+    });
+
+    // Start polling when debug tab is opened
+    const debugNavBtn = document.querySelector('[data-view="debug"]');
+    if (debugNavBtn) {
+        debugNavBtn.addEventListener('click', () => {
+            pollOcrStatus();
+            if (!ocrPollInterval) {
+                ocrPollInterval = setInterval(pollOcrStatus, 5000);
+            }
+        });
+    }
+
     return {};
 })();
