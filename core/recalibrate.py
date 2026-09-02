@@ -12,20 +12,25 @@ def recalibrate(timeout=30):
     is_home = False
     retry = 0
     start = time.time()
+    iteration = 0
     
     # Percentage-based coordinates
     center_x_pct, center_y_pct = 50, 50  # Center of screen
     top_left_x_pct, top_left_y_pct = 6.48, 6.9  # Top-left area
     
+    logger.info("recalibrate() started (timeout=%ds)", timeout)
     while(not is_home) and ((time.time()) - start) < timeout:
+        iteration += 1
+        elapsed = time.time() - start
         found = False
         time.sleep(1)
+        logger.debug("recalibrate loop iter=%d elapsed=%.1fs", iteration, elapsed)
         text = req_text("Home.World")
 
         try:
             text = text[0][0].lower()
         except Exception as e:
-            logger.info("Finding The Homepage...")
+            logger.info("Finding The Homepage... (iter=%d, raw=%s)", iteration, text)
 
         if text == "world":
             is_home = True

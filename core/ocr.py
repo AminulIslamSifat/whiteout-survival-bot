@@ -911,9 +911,32 @@ take_preferred_screen_capture_tool()
 _init_stream_resolution()
 init_services()
 
+def _resolve_ocr_port() -> int:
+    """Pick a free port dynamically and write it to system/.ocr_port for clients."""
+    import socket
+
+    # Allow explicit override via env var
+    env_port = os.environ.get("OCR_PORT")
+    if env_port:
+        return int(env_port)
+
+    # Find a free port
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    # Write port file so clients can discover it
+    port_file = Path(__file__).resolve().parent.parent / "system" / ".ocr_port"
+    port_file.parent.mkdir(parents=True, exist_ok=True)
+    port_file.write_text(str(port))
+    logger.info("OCR server using dynamic port %d (written to %s)", port, port_file)
+    return port
+
+
 if __name__ == "__main__":
+    port = _resolve_ocr_port()
     uvicorn.run(
         app,
         host="127.0.0.1",
-        port=8000
+        port=port,
     )

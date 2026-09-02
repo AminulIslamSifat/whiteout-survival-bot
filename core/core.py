@@ -20,9 +20,19 @@ logger = get_logger(__name__)
 
 
 
-ocr_url = "http://127.0.0.1:8000/ocr"
-template_matching_url = "http://127.0.0.1:8000/template"
-cache_clearing_url = "http://127.0.0.1:8000/clear_cache"
+def _get_ocr_base_url() -> str:
+    """Read OCR port from system/.ocr_port file, fall back to env var or 8000."""
+    port_file = Path(__file__).resolve().parent.parent / "system" / ".ocr_port"
+    try:
+        port = int(port_file.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        port = int(os.environ.get("OCR_PORT", "8000"))
+    return f"http://127.0.0.1:{port}"
+
+_ocr_base = _get_ocr_base_url()
+ocr_url = f"{_ocr_base}/ocr"
+template_matching_url = f"{_ocr_base}/template"
+cache_clearing_url = f"{_ocr_base}/clear_cache"
 
 OCR_HTTP_TIMEOUT_SEC = float(os.getenv("OCR_HTTP_TIMEOUT_SEC", "8"))
 OCR_REPLAY_WAIT_SEC = float(os.getenv("OCR_REPLAY_WAIT_SEC", "35"))
@@ -216,6 +226,17 @@ def _post_json_with_replay(url, payload, request_name, wait_sec=OCR_REPLAY_WAIT_
 
 
 def req_ocr(img_path=None, save_result=None, rois=None, name=None, expected_text = None):
+    import inspect
+    # Log caller for debugging unnamed OCR requests
+    if name is None:
+        frame = inspect.currentframe().f_back
+        caller_file = frame.f_code.co_filename.split("/")[-1]
+        caller_line = frame.f_lineno
+        caller_func = frame.f_code.co_name
+        logger.warning("req_ocr called WITHOUT name from %s:%d in %s()", caller_file, caller_line, caller_func)
+    else:
+        logger.info("req_ocr: name=%s expected=%s", name, expected_text)
+
     # Convert percentage-based ROIs to pixels for the OCR service.
     rois = _convert_rois_percent_to_pixel(rois)
     
@@ -609,9 +630,15 @@ def tap_on_text(
 
 
 def req_text(names=None, img_path=None, rois=None, save_result=False, coord=None):
+    import inspect
 
     # If no name is provided, send OCR for the caller-supplied ROI(s), or full page if none were given.
     if not names:
+        frame = inspect.currentframe().f_back
+        caller_file = frame.f_code.co_filename.split("/")[-1]
+        caller_line = frame.f_lineno
+        caller_func = frame.f_code.co_name
+        logger.warning("req_text() called WITHOUT names from %s:%d in %s() — doing full_page scan", caller_file, caller_line, caller_func)
         res = req_ocr(img_path, save_result, rois=rois, name="full_page")
         if res is None:
             logger.warning("OCR failed")

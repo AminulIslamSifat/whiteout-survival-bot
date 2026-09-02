@@ -401,10 +401,12 @@ async def start_bot(selection: TaskSelection):
 
     # Wait for OCR server to be ready before starting bot
     ocr_ready = False
+    port_file = PROJECT_ROOT / "system" / ".ocr_port"
     for attempt in range(60):  # up to 60 seconds
         try:
+            ocr_port = int(port_file.read_text().strip())
             async with httpx.AsyncClient(timeout=2) as client:
-                resp = await client.get("http://127.0.0.1:8000/health")
+                resp = await client.get(f"http://127.0.0.1:{ocr_port}/health")
                 if resp.status_code == 200:
                     ocr_ready = True
                     break
@@ -480,16 +482,21 @@ async def stop_bot():
             _ocr_process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             _ocr_process.kill()
-    # Kill any orphan OCR process on port 8000
+    # Kill any orphan OCR process using the dynamic port
     try:
-        result = subprocess.run(
-            ["lsof", "-ti", ":8000"], capture_output=True, text=True, timeout=5
-        )
-        for pid_str in result.stdout.strip().split():
-            pid = int(pid_str)
-            if pid != os.getpid():
-                logger.info("[Stop] Killing orphan OCR process PID %d", pid)
-                os.kill(pid, signal.SIGTERM)
+        _port_file = PROJECT_ROOT / "system" / ".ocr_port"
+        _ocr_port = int(_port_file.read_text().strip()) if _port_file.exists() else None
+        if _ocr_port is None:
+            logger.info("[Stop] No .ocr_port file found, skipping orphan check")
+        else:
+            result = subprocess.run(
+                ["lsof", "-ti", f":{_ocr_port}"], capture_output=True, text=True, timeout=5
+            )
+            for pid_str in result.stdout.strip().split():
+                pid = int(pid_str)
+                if pid != os.getpid():
+                    logger.info("[Stop] Killing orphan OCR process PID %d", pid)
+                    os.kill(pid, signal.SIGTERM)
     except Exception as e:
         logger.warning("[Stop] Failed to check orphan OCR: %s", e)
     _ocr_process = None
@@ -636,6 +643,7 @@ def _start_ocr_process():
     _ocr_log_lines.clear()
     _ocr_status = "starting"
 
+    # Let OCR server pick its own dynamic port (written to system/.ocr_port)
     _ocr_process = subprocess.Popen(
         [sys.executable, str(PROJECT_ROOT / "core" / "ocr.py")],
         stdout=subprocess.PIPE,

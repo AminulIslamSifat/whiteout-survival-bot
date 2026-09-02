@@ -59,7 +59,9 @@ def change_character(next_name):
     tap_on_text("ChiefProfile.Settings", wait=1)
     tap_on_text("ChiefProfile.Settings.Characters", wait=2)
     time.sleep(1)
+    logger.info("Scanning for player list (full_page OCR)...")
     players = req_text()
+    logger.info("Player list OCR returned %d results", len(players) if players else 0)
     names = []
     for player in players:
         try:
